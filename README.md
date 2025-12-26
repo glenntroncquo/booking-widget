@@ -78,7 +78,116 @@ Note: URL-encode special characters in the iframe src (e.g., `#` becomes `%23`).
 
 ### PostMessage API
 
-The widget supports communication with the parent window via the PostMessage API.
+The widget supports communication with the parent window via the PostMessage API. This is the recommended way to pass theme configuration from your website.
+
+#### Sending Theme Configuration
+
+**Option 1: Wait for Widget Ready Event (Recommended)**
+
+```javascript
+const iframe = document.querySelector("iframe");
+
+// Listen for widget ready event
+window.addEventListener("message", (event) => {
+  if (event.data.type === "salonify-widget-ready") {
+    // Widget is ready, send theme configuration
+    iframe.contentWindow.postMessage({
+      type: "widget-theme",
+      theme: {
+        primary: "#FF8FB2",
+        primaryHover: "#FFBDD4",
+        primaryLight: "#FFF0F7",
+        secondary: "#FFBDD4",
+        text: "#4A3F45",
+        background: "white",
+        buttonText: "white",
+      },
+    }, "*");
+  }
+});
+```
+
+**Option 2: Send Theme Immediately (if iframe is already loaded)**
+
+```javascript
+const iframe = document.querySelector("iframe");
+
+// Wait for iframe to load, then send theme
+iframe.addEventListener("load", () => {
+  iframe.contentWindow.postMessage({
+    type: "widget-theme",
+    theme: {
+      primary: "#FF8FB2",
+      primaryHover: "#FFBDD4",
+      primaryLight: "#FFF0F7",
+      secondary: "#FFBDD4",
+      text: "#4A3F45",
+      background: "white",
+      buttonText: "white",
+    },
+  }, "*");
+});
+```
+
+**Option 3: React Example with useEffect**
+
+```jsx
+import { useEffect, useRef } from "react";
+
+function AppointmentPage() {
+  const iframeRef = useRef(null);
+
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (event.data.type === "salonify-widget-ready" && iframeRef.current) {
+        iframeRef.current.contentWindow.postMessage({
+          type: "widget-theme",
+          theme: {
+            primary: "#FF8FB2",
+            primaryHover: "#FFBDD4",
+            primaryLight: "#FFF0F7",
+            secondary: "#FFBDD4",
+            text: "#4A3F45",
+            background: "white",
+            buttonText: "white",
+          },
+        }, "*");
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      src="https://your-domain.com/widget?companyId=xxx&supabaseUrl=xxx&supabaseKey=xxx"
+      width="100%"
+      height="600px"
+      frameBorder="0"
+    />
+  );
+}
+```
+
+#### Sending Full Configuration Updates
+
+You can also send complete configuration updates:
+
+```javascript
+iframe.contentWindow.postMessage({
+  type: "widget-config",
+  config: {
+    theme: {
+      primary: "#FF8FB2",
+      // ... other theme properties
+    },
+    showStaff: true,
+    maxDate: new Date("2024-12-31"),
+  }
+}, "*");
+```
 
 #### Listening to Widget Events
 
@@ -89,21 +198,6 @@ window.addEventListener("message", (event) => {
     console.log("Data:", event.data.data);
   }
 });
-```
-
-#### Sending Configuration Updates
-
-```javascript
-const iframe = document.querySelector("iframe");
-iframe.contentWindow.postMessage({
-  type: "widget-config",
-  config: {
-    theme: {
-      primary: "#FF6B9D",
-      // ... other theme properties
-    }
-  }
-}, "*");
 ```
 
 ## Deployment

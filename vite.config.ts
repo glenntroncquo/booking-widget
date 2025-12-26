@@ -14,6 +14,9 @@ export default defineConfig({
         manualChunks: undefined,
       },
     },
+    commonjsOptions: {
+      include: [/node_modules/],
+    },
   },
   resolve: {
     alias: {
@@ -21,5 +24,8 @@ export default defineConfig({
     },
   },
   base: "/",
+  optimizeDeps: {
+    include: ["salonify-booking"],
+  },
 });
 

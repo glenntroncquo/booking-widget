@@ -1,7 +1,27 @@
 import { useEffect, useState, useMemo } from "react";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { SalonBooking, SalonTheme, defaultTheme } from "salonify-booking";
-import "salonify-booking/styles"; // Import package styles
+import { SalonBooking } from "salonify-booking";
+
+// Define SalonTheme locally (not exported from package)
+interface SalonTheme {
+  primary: string;
+  primaryHover: string;
+  primaryLight: string;
+  secondary: string;
+  text: string;
+  background: string;
+  buttonText: string;
+}
+
+// Default theme matching the package's expected structure
+const defaultTheme: SalonTheme = {
+  primary: "#FF6B9D",
+  primaryHover: "#E91E63",
+  primaryLight: "#FFB3D1",
+  secondary: "#FFF0F5",
+  text: "#1F2937",
+  background: "#FEFEFE",
+  buttonText: "#FFFFFF",
+};
 
 interface WidgetConfig {
   companyId: string;
@@ -21,7 +41,6 @@ function App() {
   const [config, setConfig] = useState<WidgetConfig | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
   const [loading, setLoading] = useState(true);
-  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
 
   // Parse URL parameters
   const parseUrlParams = useMemo(() => {
@@ -44,6 +63,7 @@ function App() {
       secondary: params.get("secondary") || defaultTheme.secondary,
       text: params.get("text") || defaultTheme.text,
       background: params.get("background") || defaultTheme.background,
+      buttonText: params.get("buttonText") || defaultTheme.buttonText,
     };
 
     // Optional maxDate
@@ -84,13 +104,7 @@ function App() {
     }
 
     try {
-      // Initialize Supabase client
-      const client = createClient(
-        parseUrlParams.supabaseUrl,
-        parseUrlParams.supabaseKey
-      );
-
-      setSupabase(client);
+      // Set configuration (the package will handle Supabase client creation internally)
       setConfig(parseUrlParams);
       setError(null);
     } catch (err) {
@@ -106,20 +120,58 @@ function App() {
     }
   }, [parseUrlParams]);
 
+  // Send ready event to parent window when widget is loaded
+  useEffect(() => {
+    if (config && window.parent && window.parent !== window) {
+      window.parent.postMessage(
+        {
+          type: "salonify-widget-ready",
+          source: "salonify-booking-widget",
+        },
+        "*" // In production, specify the origin
+      );
+    }
+  }, [config]);
+
   // Listen for postMessage from parent window
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       // Security: Only accept messages from same origin or trusted sources
       // In production, you might want to validate event.origin
-      if (event.data && event.data.type === "widget-config") {
-        try {
-          const newConfig = event.data.config as Partial<WidgetConfig>;
-          if (config && supabase) {
+      if (!event.data || typeof event.data !== "object") return;
+
+      try {
+        // Handle theme updates
+        if (event.data.type === "widget-theme" && event.data.theme) {
+          if (config) {
+            const updatedTheme: SalonTheme = {
+              ...defaultTheme,
+              ...config.theme,
+              ...event.data.theme,
+            };
+            setConfig({ ...config, theme: updatedTheme });
+          }
+          return;
+        }
+
+        // Handle full config updates
+        if (event.data.type === "widget-config" && event.data.config) {
+          if (config) {
+            const newConfig = event.data.config as Partial<WidgetConfig>;
+            // Merge theme if provided
+            if (newConfig.theme) {
+              newConfig.theme = {
+                ...defaultTheme,
+                ...config.theme,
+                ...newConfig.theme,
+              };
+            }
             setConfig({ ...config, ...newConfig });
           }
-        } catch (err) {
-          console.error("Failed to update config from postMessage:", err);
+          return;
         }
+      } catch (err) {
+        console.error("Failed to update config from postMessage:", err);
       }
     };
 
@@ -127,21 +179,21 @@ function App() {
     return () => {
       window.removeEventListener("message", handleMessage);
     };
-  }, [config, supabase]);
+  }, [config]);
 
-  // Send events to parent window
-  const sendEventToParent = (eventType: string, data?: unknown) => {
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage(
-        {
-          type: "salonify-booking-event",
-          event: eventType,
-          data,
-        },
-        "*" // In production, specify the origin
-      );
-    }
-  };
+  // Send events to parent window (available for future use)
+  // const sendEventToParent = (eventType: string, data?: unknown) => {
+  //   if (window.parent && window.parent !== window) {
+  //     window.parent.postMessage(
+  //       {
+  //         type: "salonify-booking-event",
+  //         event: eventType,
+  //         data,
+  //       },
+  //       "*" // In production, specify the origin
+  //     );
+  //   }
+  // };
 
   // Render loading state
   if (loading) {
@@ -163,7 +215,7 @@ function App() {
   }
 
   // Render booking widget
-  if (!config || !supabase) {
+  if (!config) {
     return (
       <div className="error-container">
         <div className="error-title">Initialization Error</div>
@@ -178,7 +230,10 @@ function App() {
     <div className="widget-container">
       <SalonBooking
         companyId={config.companyId}
-        supabase={supabase}
+        supabaseConfig={{
+          url: config.supabaseUrl,
+          anonKey: config.supabaseKey,
+        }}
         theme={config.theme}
         maxDate={config.maxDate}
         shouldShowStaff={config.showStaff}

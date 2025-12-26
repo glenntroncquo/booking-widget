@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Salonify Widget Example</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: linear-gradient(to bottom, #FFF0F7, #FFBDD4);
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    iframe {
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Salonify Booking Widget Example</h1>
+    <p>This example shows how to pass theme configuration via postMessage.</p>
+    
+    <iframe
+      id="booking-widget"
+      src="http://localhost:5173/?companyId=YOUR_COMPANY_ID&supabaseUrl=YOUR_SUPABASE_URL&supabaseKey=YOUR_SUPABASE_KEY"
+      width="100%"
+      height="700px"
+      frameborder="0"
+    ></iframe>
+  </div>
+
+  <script>
+    const iframe = document.getElementById('booking-widget');
+    
+    // Define your theme (matching your website's design)
+    const salonTheme = {
+      primary: "#FF8FB2",
+      primaryHover: "#FFBDD4",
+      primaryLight: "#FFF0F7",
+      secondary: "#FFBDD4",
+      text: "#4A3F45",
+      background: "white",
+      buttonText: "white",
+    };
+
+    // Listen for widget ready event
+    window.addEventListener("message", (event) => {
+      // In production, validate event.origin for security
+      // if (event.origin !== "https://your-widget-domain.com") return;
+      
+      if (event.data.type === "salonify-widget-ready") {
+        console.log("Widget is ready, sending theme...");
+        
+        // Send theme configuration to widget
+        iframe.contentWindow.postMessage({
+          type: "widget-theme",
+          theme: salonTheme,
+        }, "*");
+      }
+    });
+
+    // Fallback: Send theme when iframe loads (in case ready event is missed)
+    iframe.addEventListener("load", () => {
+      setTimeout(() => {
+        iframe.contentWindow.postMessage({
+          type: "widget-theme",
+          theme: salonTheme,
+        }, "*");
+      }, 100);
+    });
+  </script>
+</body>
+</html>
+
