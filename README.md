@@ -35,11 +35,22 @@ The built files will be in the `dist/` directory, ready for deployment to any st
 
 ### Basic Embedding
 
-Embed the widget in any website using an iframe:
+Embed the widget in any website using an iframe. You can use either the root URL or the `/widget` path:
 
+**Option 1: Using `/widget` path (Recommended)**
 ```html
 <iframe 
   src="https://your-domain.com/widget?companyId=xxx&supabaseUrl=xxx&supabaseKey=xxx"
+  width="100%" 
+  height="600px"
+  frameborder="0"
+></iframe>
+```
+
+**Option 2: Using root path**
+```html
+<iframe 
+  src="https://your-domain.com/?companyId=xxx&supabaseUrl=xxx&supabaseKey=xxx"
   width="100%" 
   height="600px"
   frameborder="0"
