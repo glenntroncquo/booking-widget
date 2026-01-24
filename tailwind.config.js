@@ -11,6 +11,11 @@ export default {
         sans: ["Inter", "sans-serif"],
         display: ["Montserrat", "sans-serif"],
       },
+      colors: {
+        salon: {
+          "text-dark": "#4A3F45",
+        },
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",

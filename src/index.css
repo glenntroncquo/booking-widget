@@ -24,7 +24,7 @@
   }
 
   body {
-    @apply antialiased;
+    @apply antialiased text-salon-text-dark;
     font-family: "Inter", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -44,14 +44,14 @@
     font-weight: inherit;
   }
 
-  /* Apply Montserrat to headings */
+  /* Apply Montserrat to headings with correct color */
   h1,
   h2,
   h3,
   h4,
   h5,
   h6 {
-    @apply font-display;
+    @apply font-display text-salon-text-dark;
   }
 
   #root {
