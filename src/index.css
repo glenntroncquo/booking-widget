@@ -11,64 +11,7 @@
   }
 
   * {
-    margin: 0;
-    padding: 0;
     box-sizing: border-box;
-  }
-
-  /* Fix react-day-picker calendar layout - override global reset */
-  .rdp {
-    --rdp-cell-size: 40px;
-    --rdp-accent-color: #FF6B9D;
-    --rdp-background-color: #FFF0F5;
-    --rdp-accent-color-dark: #E91E63;
-    --rdp-background-color-dark: #180270;
-    --rdp-outline: 2px solid var(--rdp-accent-color);
-    --rdp-outline-selected: 3px solid var(--rdp-accent-color);
-    margin: 0;
-  }
-
-  .rdp-table {
-    width: 100%;
-    max-width: none;
-    border-collapse: collapse;
-  }
-
-  .rdp-head_row {
-    display: flex;
-  }
-
-  .rdp-head_cell {
-    flex: 1 1 0;
-    min-width: 0;
-    padding: 0.5rem;
-    text-align: center;
-    font-weight: 500;
-    font-size: 0.875rem;
-  }
-
-  .rdp-row {
-    display: flex;
-    flex-wrap: wrap;
-    max-width: 100%;
-  }
-
-  .rdp-cell {
-    flex: 1 1 0;
-    min-width: 0;
-    position: relative;
-    padding: 0;
-    text-align: center;
-  }
-
-  .rdp-day {
-    width: var(--rdp-cell-size);
-    height: var(--rdp-cell-size);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0;
-    padding: 0;
   }
 
   html,
@@ -77,6 +20,12 @@
     margin: 0;
     padding: 0;
     overflow-x: hidden;
+  }
+
+  /* Reset only specific elements, not everything */
+  body, h1, h2, h3, h4, h5, h6, p, ul, ol, li {
+    margin: 0;
+    padding: 0;
   }
 
   body {
