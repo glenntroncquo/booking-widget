@@ -24,9 +24,24 @@
   }
 
   body {
+    @apply antialiased;
     font-family: "Inter", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "kern" 1;
+    text-rendering: optimizeLegibility;
+    font-weight: 400; /* Ensure default weight matches */
+  }
+  
+  /* Ensure all text elements inherit proper font rendering */
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Ensure consistent font rendering for all text elements */
+  p, span, div, a, button, input, textarea, select, label {
+    font-weight: inherit;
   }
 
   #root {
