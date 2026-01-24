@@ -93,7 +93,11 @@ function App() {
 
   // Initialize configuration and Supabase client
   useEffect(() => {
+    console.log("[Salonify Widget] Initializing...");
+    console.log("[Salonify Widget] URL params:", window.location.search);
+    
     if (!parseUrlParams) {
+      console.error("[Salonify Widget] Missing required parameters");
       setError({
         title: "Missing Required Parameters",
         message:
@@ -104,10 +108,18 @@ function App() {
     }
 
     try {
+      console.log("[Salonify Widget] Configuration parsed:", {
+        companyId: parseUrlParams.companyId,
+        supabaseUrl: parseUrlParams.supabaseUrl,
+        hasTheme: !!parseUrlParams.theme,
+      });
+      
       // Set configuration (the package will handle Supabase client creation internally)
       setConfig(parseUrlParams);
       setError(null);
+      console.log("[Salonify Widget] Configuration set successfully");
     } catch (err) {
+      console.error("[Salonify Widget] Configuration error:", err);
       setError({
         title: "Configuration Error",
         message:
@@ -123,6 +135,7 @@ function App() {
   // Send ready event to parent window when widget is loaded
   useEffect(() => {
     if (config && window.parent && window.parent !== window) {
+      console.log("[Salonify Widget] Widget ready, sending ready event to parent");
       window.parent.postMessage(
         {
           type: "salonify-widget-ready",
@@ -130,6 +143,8 @@ function App() {
         },
         "*" // In production, specify the origin
       );
+    } else if (config) {
+      console.log("[Salonify Widget] Widget ready (not in iframe)");
     }
   }, [config]);
 
@@ -143,12 +158,14 @@ function App() {
       try {
         // Handle theme updates
         if (event.data.type === "widget-theme" && event.data.theme) {
+          console.log("[Salonify Widget] Received theme update:", event.data.theme);
           if (config) {
             const updatedTheme: SalonTheme = {
               ...defaultTheme,
               ...config.theme,
               ...event.data.theme,
             };
+            console.log("[Salonify Widget] Applying theme:", updatedTheme);
             setConfig({ ...config, theme: updatedTheme });
           }
           return;
