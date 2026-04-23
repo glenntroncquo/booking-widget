@@ -42,15 +42,19 @@ function App() {
   const [error, setError] = useState<ErrorState | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Parse URL parameters
+  // Parse URL parameters (supabaseUrl and supabaseKey can come from env if not in URL)
   const parseUrlParams = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
 
     const companyId = params.get("companyId");
-    const supabaseUrl = params.get("supabaseUrl");
-    const supabaseKey = params.get("supabaseKey");
+    const supabaseUrl =
+      params.get("supabaseUrl") || import.meta.env.VITE_SUPABASE_URL || "";
+    const supabaseKey =
+      params.get("supabaseKey") ||
+      import.meta.env.VITE_SUPABASE_ANON_KEY ||
+      "";
 
-    // Required parameters
+    // Required: companyId from URL; supabaseUrl and supabaseKey from URL or env
     if (!companyId || !supabaseUrl || !supabaseKey) {
       return null;
     }
@@ -101,7 +105,7 @@ function App() {
       setError({
         title: "Missing Required Parameters",
         message:
-          "Please provide companyId, supabaseUrl, and supabaseKey as URL parameters.",
+          "Please provide companyId as a URL parameter, and supabaseUrl and supabaseKey either as URL parameters or as environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).",
       });
       setLoading(false);
       return;
