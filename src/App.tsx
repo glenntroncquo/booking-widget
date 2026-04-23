@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { SalonBooking } from "salonify-booking";
+import { SalonBooking } from "./salonify-booking";
 
 // Define SalonTheme locally (not exported from package)
 interface SalonTheme {
@@ -42,19 +42,15 @@ function App() {
   const [error, setError] = useState<ErrorState | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Parse URL parameters (supabaseUrl and supabaseKey can come from env if not in URL)
+  // Parse URL parameters (Supabase config must come from env)
   const parseUrlParams = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
 
     const companyId = params.get("companyId");
-    const supabaseUrl =
-      params.get("supabaseUrl") || import.meta.env.VITE_SUPABASE_URL || "";
-    const supabaseKey =
-      params.get("supabaseKey") ||
-      import.meta.env.VITE_SUPABASE_ANON_KEY ||
-      "";
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
-    // Required: companyId from URL; supabaseUrl and supabaseKey from URL or env
+    // Required: companyId from URL; supabaseUrl and supabaseKey from env
     if (!companyId || !supabaseUrl || !supabaseKey) {
       return null;
     }
@@ -105,7 +101,7 @@ function App() {
       setError({
         title: "Missing Required Parameters",
         message:
-          "Please provide companyId as a URL parameter, and supabaseUrl and supabaseKey either as URL parameters or as environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).",
+          "Please provide companyId as a URL parameter, and configure Supabase via environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).",
       });
       setLoading(false);
       return;
