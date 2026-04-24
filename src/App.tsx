@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { SalonBooking } from "./salonify-booking";
+import { FloatingLauncher } from "./components/FloatingLauncher";
 
 // Define SalonTheme locally (not exported from package)
 interface SalonTheme {
@@ -41,6 +42,17 @@ function App() {
   const [config, setConfig] = useState<WidgetConfig | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const displayMode = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    // supported: mode=floating OR launcher=true|1
+    const mode = params.get("mode");
+    if (mode === "floating") return "floating";
+    const launcher = params.get("launcher");
+    if (launcher && ["1", "true", "yes"].includes(launcher.toLowerCase()))
+      return "floating";
+    return "inline";
+  }, []);
 
   // Parse URL parameters (Supabase config must come from env)
   const parseUrlParams = useMemo(() => {
@@ -245,16 +257,31 @@ function App() {
 
   return (
     <div className="widget-container">
-      <SalonBooking
-        companyId={config.companyId}
-        supabaseConfig={{
-          url: config.supabaseUrl,
-          anonKey: config.supabaseKey,
-        }}
-        theme={config.theme}
-        maxDate={config.maxDate}
-        shouldShowStaff={config.showStaff}
-      />
+      {displayMode === "floating" ? (
+        <FloatingLauncher theme={config.theme || defaultTheme}>
+          <SalonBooking
+            companyId={config.companyId}
+            supabaseConfig={{
+              url: config.supabaseUrl,
+              anonKey: config.supabaseKey,
+            }}
+            theme={config.theme}
+            maxDate={config.maxDate}
+            shouldShowStaff={config.showStaff}
+          />
+        </FloatingLauncher>
+      ) : (
+        <SalonBooking
+          companyId={config.companyId}
+          supabaseConfig={{
+            url: config.supabaseUrl,
+            anonKey: config.supabaseKey,
+          }}
+          theme={config.theme}
+          maxDate={config.maxDate}
+          shouldShowStaff={config.showStaff}
+        />
+      )}
     </div>
   );
 }

@@ -64,6 +64,117 @@
   }
 }
 
+/* Floating launcher shell (for iframe bottom-right embeds) */
+.salonify-floating-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none; /* click-through everywhere except widget */
+  z-index: 2147483646;
+}
+
+.salonify-floating-anchor {
+  position: absolute;
+  right: calc(20px + env(safe-area-inset-right, 0px));
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+
+.salonify-floating-launcher {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  min-height: 56px;
+  max-width: 100%;
+  cursor: pointer;
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 160ms ease,
+    background-color 160ms ease;
+}
+
+.salonify-floating-launcher-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.18);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  flex: 0 0 auto;
+}
+
+.salonify-floating-launcher-text {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.salonify-floating-panel {
+  pointer-events: auto;
+  width: min(420px, calc(100vw - 40px));
+  height: min(720px, calc(100vh - 40px));
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  transform-origin: 100% 100%;
+  transition:
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 180ms ease;
+  display: flex;
+  flex-direction: column;
+  will-change: transform, opacity;
+}
+
+.salonify-floating-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 12px 16px;
+  border-bottom: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.salonify-floating-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.salonify-floating-close {
+  pointer-events: auto;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  padding: 8px;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.salonify-floating-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.salonify-floating-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .salonify-floating-launcher,
+  .salonify-floating-panel {
+    transition: none !important;
+  }
+}
+
 /* Widget container - minimal styling, let the component handle its own layout */
 .widget-container {
   width: 100%;

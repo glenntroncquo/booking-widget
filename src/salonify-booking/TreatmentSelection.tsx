@@ -87,7 +87,7 @@ export function TreatmentSelection({
                       const isSelected = selectedTreatments.some(
                         (item) =>
                           item.treatment.id === treatment.id &&
-                          item.option.id === option.id
+                          item.option.id === option.id,
                       );
 
                       return (
@@ -97,7 +97,7 @@ export function TreatmentSelection({
                             "flex items-center justify-between p-3 border rounded-lg cursor-pointer",
                             isSelected
                               ? "border-salon-primary bg-salon-primary-light"
-                              : "border-gray-200 hover:border-salon-primary"
+                              : "border-gray-200 hover:border-salon-primary",
                           )}
                           onClick={() => onTreatmentSelect(treatment, option)}
                         >
@@ -109,7 +109,7 @@ export function TreatmentSelection({
                                     getImageUrl(
                                       option.image_path,
                                       supabase,
-                                      "company"
+                                      "company",
                                     ) || undefined
                                   }
                                   alt={option.name}
@@ -160,4 +160,3 @@ export function TreatmentSelection({
     </div>
   );
 }
-
