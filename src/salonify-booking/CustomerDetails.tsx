@@ -19,6 +19,7 @@ interface CustomerDetailsProps {
   lastName: string;
   email: string;
   phone: string;
+  referralCode: string;
   notes: string;
   imagePreview: string | null;
   imageUploading: boolean;
@@ -28,6 +29,7 @@ interface CustomerDetailsProps {
   onLastNameChange: (value: string) => void;
   onEmailChange: (value: string) => void;
   onPhoneChange: (value: string) => void;
+  onReferralCodeChange: (value: string) => void;
   onNotesChange: (value: string) => void;
   onImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveImage: () => void;
@@ -43,6 +45,7 @@ export function CustomerDetails({
   lastName,
   email,
   phone,
+  referralCode,
   notes,
   imagePreview,
   imageUploading,
@@ -52,6 +55,7 @@ export function CustomerDetails({
   onLastNameChange,
   onEmailChange,
   onPhoneChange,
+  onReferralCodeChange,
   onNotesChange,
   onImageUpload,
   onRemoveImage,
@@ -218,6 +222,18 @@ export function CustomerDetails({
             className="mt-1"
             style={{ fontSize: "16px" }}
             required
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="referralCode">Referral code</Label>
+          <Input
+            id="referralCode"
+            value={referralCode}
+            onChange={(e) => onReferralCodeChange(e.target.value)}
+            className="mt-1"
+            style={{ fontSize: "16px" }}
+            placeholder="Voer je code in"
           />
         </div>
 

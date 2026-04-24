@@ -15,6 +15,7 @@ export function useBookingState(maxDate: Date) {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [notes, setNotes] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageData, setImageData] = useState<string | null>(null);
@@ -127,6 +128,7 @@ export function useBookingState(maxDate: Date) {
     setLastName("");
     setEmail("");
     setPhone("");
+    setReferralCode("");
     setNotes("");
     setImagePreview(null);
     setImageData(null);
@@ -157,6 +159,7 @@ export function useBookingState(maxDate: Date) {
     lastName,
     email,
     phone,
+    referralCode,
     notes,
     imagePreview,
     imageData,
@@ -179,6 +182,7 @@ export function useBookingState(maxDate: Date) {
     setLastName,
     setEmail,
     setPhone,
+    setReferralCode,
     setNotes,
     setImagePreview,
     setImageData,

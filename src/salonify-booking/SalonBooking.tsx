@@ -570,6 +570,162 @@ export function SalonBooking({
         0
       );
 
+      const referralCodeTrimmed = bookingState.referralCode.trim();
+
+      const isRecord = (value: unknown): value is Record<string, unknown> =>
+        typeof value === "object" && value !== null;
+
+      const tryParseJson = (value: unknown): unknown | undefined => {
+        if (!value) return undefined;
+        if (typeof value === "object") return value;
+        if (typeof value !== "string") return undefined;
+        try {
+          return JSON.parse(value) as unknown;
+        } catch {
+          return undefined;
+        }
+      };
+
+      const normalizeString = (value: unknown): string | undefined => {
+        if (typeof value !== "string") return undefined;
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
+      };
+
+      const extractErrorKey = (response: {
+        data: unknown;
+        error: unknown;
+      }): string | undefined => {
+        if (isRecord(response.data) && typeof response.data.errorKey === "string") {
+          return response.data.errorKey;
+        }
+
+        const errObj = response.error as
+          | { context?: { body?: unknown }; message?: unknown }
+          | undefined;
+        const ctxBody = errObj?.context?.body;
+        const ctxJson = tryParseJson(ctxBody);
+        if (isRecord(ctxJson) && typeof ctxJson.errorKey === "string") {
+          return ctxJson.errorKey;
+        }
+
+        const msgJson = tryParseJson(errObj?.message);
+        if (isRecord(msgJson) && typeof msgJson.errorKey === "string") {
+          return msgJson.errorKey;
+        }
+
+        return undefined;
+      };
+
+      const extractErrorMessage = (response: {
+        data: unknown;
+        error: unknown;
+      }): string | undefined => {
+        if (isRecord(response.data)) {
+          const m =
+            normalizeString(response.data.message) ||
+            normalizeString(response.data.error) ||
+            normalizeString(response.data.errorMessage);
+          if (m) return m;
+        }
+
+        const errObj = response.error as
+          | { context?: { body?: unknown }; message?: unknown }
+          | undefined;
+
+        const ctxJson = tryParseJson(errObj?.context?.body);
+        if (isRecord(ctxJson)) {
+          const m =
+            normalizeString(ctxJson.message) ||
+            normalizeString(ctxJson.error) ||
+            normalizeString(ctxJson.errorMessage);
+          if (m) return m;
+        }
+
+        return normalizeString(errObj?.message);
+      };
+
+      const friendlyErrorMessage = (errorKeyOrMessage: string): string | undefined => {
+        // Exact/known errorKey values
+        switch (errorKeyOrMessage) {
+          case "REFERRAL_INVALID":
+            return "Die referralcode bestaat niet.";
+          case "REFERRAL_INACTIVE":
+            return "Deze referralcode is niet meer actief.";
+          case "REFERRAL_EXPIRED":
+            return "Deze referralcode is verlopen.";
+          case "REFERRAL_NOT_NEW_CLIENT":
+            return "Referralcodes zijn alleen geldig voor nieuwe klanten bij deze salon.";
+          case "REFERRAL_REDEMPTION_CONFLICT":
+            return "Deze referral kan niet worden toegepast op deze boeking.";
+          case "CONFLICT_DETECTED":
+          case "TIME_SLOT_ALREADY_BOOKED":
+          case "BOOKING_SLOT_TAKEN":
+            return "Dit tijdslot is net geboekt—kies een ander tijdstip.";
+          case "NOT_AVAILABLE":
+            return "Dit tijdstip valt buiten de beschikbaarheid van de medewerker.";
+          case "CONCURRENCY_RETRY":
+            return "Het ging net mis door drukte. Probeer het nog eens.";
+          case "BOOKING_FAILED":
+            return "Boeken is niet gelukt. Probeer het opnieuw.";
+          default:
+            break;
+        }
+
+        // Heuristics for raw Postgres errors that sometimes leak as errorKey/SQLERRM
+        const lower = errorKeyOrMessage.toLowerCase();
+        if (lower.includes("method not allowed") || lower.includes("405")) {
+          return "Boeken is tijdelijk niet mogelijk. Probeer het later opnieuw.";
+        }
+        if (
+          lower.includes("could not serialize") ||
+          lower.includes("serialization failure") ||
+          lower.includes("deadlock detected")
+        ) {
+          return "Het ging net mis door drukte. Probeer het nog eens.";
+        }
+        if (lower.includes("duplicate key") || lower.includes("unique constraint")) {
+          return "Dit tijdslot is net geboekt—kies een ander tijdstip.";
+        }
+        if (lower.includes("invalid image data format")) {
+          return "De afbeelding is ongeldig. Upload een andere afbeelding of boek zonder afbeelding.";
+        }
+        if (lower.includes("image upload failed")) {
+          return "Uploaden van de afbeelding is mislukt. Probeer het opnieuw of boek zonder afbeelding.";
+        }
+        if (lower.includes("missing required fields") || lower.includes("invalid treatments array")) {
+          return "Controleer je gegevens en probeer opnieuw.";
+        }
+        if (lower.includes("each treatment must have treatmentid") || lower.includes("priceoptionid")) {
+          return "Er is iets misgegaan met de gekozen behandeling(en). Probeer opnieuw.";
+        }
+        if (lower.includes("internal server error")) {
+          return "Er ging iets mis aan onze kant. Probeer het later opnieuw.";
+        }
+
+        // Edge-function level message strings (when no errorKey)
+        if (errorKeyOrMessage === "Method not allowed") {
+          return "Boeken is tijdelijk niet mogelijk. Probeer het later opnieuw.";
+        }
+        if (errorKeyOrMessage === "Missing required fields or invalid treatments array") {
+          return "Controleer je gegevens en probeer opnieuw.";
+        }
+        if (errorKeyOrMessage === "Each treatment must have treatmentId and priceOptionId") {
+          return "Er is iets misgegaan met de gekozen behandeling(en). Probeer opnieuw.";
+        }
+        if (errorKeyOrMessage === "Invalid image data format") {
+          return "De afbeelding is ongeldig. Upload een andere afbeelding of boek zonder afbeelding.";
+        }
+        if (errorKeyOrMessage === "Image upload failed") {
+          return "Uploaden van de afbeelding is mislukt. Probeer het opnieuw of boek zonder afbeelding.";
+        }
+        if (errorKeyOrMessage === "Internal server error") {
+          return "Er ging iets mis aan onze kant. Probeer het later opnieuw.";
+        }
+
+        return undefined;
+      };
+
       const response = await supabase.functions.invoke("book-appointmentv2", {
         body: {
           start: startTimeUTC.toISOString(),
@@ -585,13 +741,39 @@ export function SalonBooking({
           phone: bookingState.phone,
           notes: bookingState.notes || "",
           imageData: imageUpload.imageData,
+          ...(referralCodeTrimmed.length > 0
+            ? { referralCode: referralCodeTrimmed }
+            : {}),
         },
       });
 
-      if (response.error) {
-        console.error("Error booking appointment:", response.error);
+      const errorKeyFromResponse = extractErrorKey(response);
+      const errorMessageFromResponse = extractErrorMessage(response);
+      const hasReferralCode = referralCodeTrimmed.length > 0;
+
+      const functionReturnedFailure =
+        isRecord(response.data) && response.data.success === false;
+
+      if (response.error || functionReturnedFailure) {
+        const messageFromKey = errorKeyFromResponse
+          ? friendlyErrorMessage(errorKeyFromResponse)
+          : undefined;
+        const messageFromMessage = errorMessageFromResponse
+          ? friendlyErrorMessage(errorMessageFromResponse)
+          : undefined;
+
+        console.error("Error booking appointment:", {
+          errorKey: errorKeyFromResponse,
+          errorMessage: errorMessageFromResponse,
+          hasReferralCode,
+          error: response.error,
+          data: response.data,
+        });
+
         toast.error(
-          "Er is een fout opgetreden bij het boeken van uw afspraak. Probeer het opnieuw."
+          messageFromKey ||
+            messageFromMessage ||
+            "Er is een fout opgetreden bij het boeken van uw afspraak. Probeer het opnieuw."
         );
         return;
       }
@@ -619,6 +801,7 @@ export function SalonBooking({
         staffName,
         treatments: [...bookingState.selectedTreatments],
         totalPrice: calculateTotalPrice(bookingState.selectedTreatments),
+        referralApplied: referralCodeTrimmed.length > 0,
       });
 
       toast.success(
@@ -856,6 +1039,7 @@ export function SalonBooking({
                 lastName={bookingState.lastName}
                 email={bookingState.email}
                 phone={bookingState.phone}
+                referralCode={bookingState.referralCode}
                 notes={bookingState.notes}
                 imagePreview={imageUpload.imagePreview}
                 imageUploading={imageUpload.imageUploading}
@@ -865,6 +1049,7 @@ export function SalonBooking({
                 onLastNameChange={bookingState.setLastName}
                 onEmailChange={bookingState.setEmail}
                 onPhoneChange={bookingState.setPhone}
+                onReferralCodeChange={bookingState.setReferralCode}
                 onNotesChange={bookingState.setNotes}
                 onImageUpload={imageUpload.handleImageUpload}
                 onRemoveImage={imageUpload.removeImage}

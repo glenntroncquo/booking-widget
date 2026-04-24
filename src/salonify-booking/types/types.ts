@@ -96,6 +96,7 @@ export interface BookingData {
   staffName: string;
   treatments: SelectedTreatment[];
   totalPrice: number;
+  referralApplied?: boolean;
 }
 
 export const defaultTheme: SalonTheme = {

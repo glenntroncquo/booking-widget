@@ -70,6 +70,11 @@ export function BookingConfirmation({
               <Check className="h-8 w-8 text-green-600" />
             </div>
             <h3 className="text-xl font-bold mb-2">Tot snel!</h3>
+            {bookingData.referralApplied && (
+              <div className="text-sm font-medium text-green-700">
+                Referral toegepast
+              </div>
+            )}
           </div>
 
           <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
