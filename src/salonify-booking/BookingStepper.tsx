@@ -8,6 +8,7 @@ interface BookingStepperProps {
   selectedStaffId: string | null;
   selectedTimeSlot: string | null;
   onStepClick: (step: number) => void;
+  isMobile: boolean;
 }
 
 export function BookingStepper({
@@ -17,9 +18,15 @@ export function BookingStepper({
   selectedStaffId,
   selectedTimeSlot,
   onStepClick,
+  isMobile,
 }: BookingStepperProps) {
   return (
-    <div className="px-4 pt-6 pb-4 border-b">
+    <div
+      className="px-4 pb-4 border-b"
+      style={isMobile
+        ? { paddingTop: "calc(1.5rem + env(safe-area-inset-top, 0px))" }
+        : { paddingTop: "1.5rem" }}
+    >
       <h2 className="text-lg font-bold mb-4 text-center">
         Boek een afspraak
       </h2>

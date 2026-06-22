@@ -36,7 +36,10 @@ export function BookingFooter({
 
   if (isMobile) {
     return (
-      <div className="sticky bottom-0 left-0 right-0 bg-white border-t p-4 flex items-center justify-between">
+      <div
+        className="sticky bottom-0 left-0 right-0 bg-white border-t p-4 flex items-center justify-between"
+        style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}
+      >
         {hasNoTreatments && currentStep === 1 ? (
           <div className="flex items-center justify-between w-full">
             <div className="flex flex-col">

@@ -905,10 +905,10 @@ export function SalonBooking({
 
       <div
         className={cn(
-          "w-full bg-white shadow-xl rounded-xl overflow-hidden border border-gray-100 relative",
+          "w-full bg-white relative",
           isMobile
-            ? "min-h-[80vh] max-h-[80vh] flex flex-col"
-            : "max-w-md mx-auto"
+            ? "flex flex-col h-screen overflow-hidden"
+            : "max-w-md mx-auto shadow-xl rounded-xl overflow-hidden border border-gray-100"
         )}
         style={themeStyles}
       >
@@ -919,12 +919,13 @@ export function SalonBooking({
           selectedStaffId={bookingState.selectedStaffId}
           selectedTimeSlot={bookingState.selectedTimeSlot}
           onStepClick={bookingState.handleStepClick}
+          isMobile={isMobile}
         />
 
         <div
           className={cn(
-            isMobile ? "flex-1 overflow-y-auto" : "p-4",
-            "h-[500px] overflow-y-auto"
+            "overflow-y-auto",
+            isMobile ? "flex-1" : "p-4 h-[500px]"
           )}
         >
           <div className={cn(isMobile ? "p-4" : "")}>
@@ -1032,7 +1033,10 @@ export function SalonBooking({
             />
 
             <div
-              className="absolute bottom-0 left-0 right-0 z-50 bg-white border-t rounded-b-xl shadow-2xl"
+              className={cn(
+                "absolute bottom-0 left-0 right-0 z-50 bg-white border-t shadow-2xl",
+                !isMobile && "rounded-b-xl"
+              )}
               style={{
                 animation: emailInputClosing
                   ? "slideOutToBottom 0.3s ease-in"
