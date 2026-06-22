@@ -35,7 +35,13 @@ import { CustomerDetails } from "./CustomerDetails";
 import { BookingConfirmation } from "./BookingConfirmation";
 import { BookingStepper } from "./BookingStepper";
 import { BookingFooter } from "./BookingFooter";
-import { useBookingState, useAvailability, useImageUpload } from "./hooks";
+import { StaffSelector } from "./StaffSelector";
+import {
+  useBookingState,
+  useAvailability,
+  useImageUpload,
+  useStaff,
+} from "./hooks";
 
 export function SalonBooking({
   companyId,
@@ -65,8 +71,10 @@ export function SalonBooking({
   const availability = useAvailability(
     supabase,
     companyId,
-    bookingState.selectedTreatments
+    bookingState.selectedTreatments,
+    bookingState.selectedStaffIds
   );
+  const staffList = useStaff(supabase, companyId);
   const imageUpload = useImageUpload();
 
   // Local state
@@ -174,52 +182,52 @@ export function SalonBooking({
     }
   };
 
-  // Fetch treatments from Supabase
+  // Fetch treatments, optionally filtered by the selected staff
+  const staffFilterKey = JSON.stringify(bookingState.selectedStaffIds);
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchTreatments() {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from("treatment")
-          .select(
-            `
-          id,
-          name,
-          description,
-          company_id,
-          order,
-          price_option (
-            id,
-            name,
-            price,
-            max_price,
-            duration_in_minutes,
-            image_path,
-            order
-          )
-        `
-          )
-          .eq("company_id", companyId)
-          .eq("is_active", true)
-          .order("order");
+        const staffIds: string[] = JSON.parse(staffFilterKey);
+        const { data, error } = await supabase.functions.invoke(
+          "get-treatments",
+          {
+            body: {
+              company_id: companyId,
+              ...(staffIds.length > 0 ? { staff_ids: staffIds } : {}),
+            },
+          }
+        );
+
+        if (cancelled) return;
 
         if (error) {
           console.error("Error fetching treatments:", error);
           return;
         }
 
-        if (data) {
+        if (Array.isArray(data)) {
           setTreatments(data as Treatment[]);
         }
       } catch (err) {
-        console.error("Failed to fetch treatments:", err);
+        if (!cancelled) {
+          console.error("Failed to fetch treatments:", err);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
     fetchTreatments();
-  }, [supabase, companyId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, companyId, staffFilterKey]);
 
   // Update time slots for a selected day and staff member
   const updateTimeSlotsForSelectedDay = useCallback(
@@ -337,6 +345,24 @@ export function SalonBooking({
       }))
     ),
   ]);
+
+  // Reset availability when the staff filter changes so step 2 refetches
+  useEffect(() => {
+    availability.resetAvailability();
+    bookingState.setSelectedDay(null);
+    bookingState.setSelectedStaffId(null);
+    bookingState.setSelectedTimeSlot(null);
+    bookingState.setSelectedSlotData(null);
+    bookingState.setTimeSlots([]);
+
+    if (
+      bookingState.currentStep === 2 &&
+      bookingState.selectedTreatments.length > 0
+    ) {
+      availability.fetchRequiredMonths(bookingState.currentEndOfWeek, 2);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(bookingState.selectedStaffIds)]);
 
   useEffect(() => {
     if (
@@ -919,6 +945,20 @@ export function SalonBooking({
           selectedStaffId={bookingState.selectedStaffId}
           selectedTimeSlot={bookingState.selectedTimeSlot}
           onStepClick={bookingState.handleStepClick}
+          headerRight={
+            shouldShowStaff &&
+            (bookingState.currentStep === 1 ||
+              bookingState.currentStep === 2) &&
+            (staffList.staff.length > 0 || staffList.loading) ? (
+              <StaffSelector
+                staff={staffList.staff}
+                selectedStaffIds={bookingState.selectedStaffIds}
+                loading={staffList.loading}
+                supabase={supabase}
+                onChange={bookingState.setSelectedStaffIds}
+              />
+            ) : null
+          }
         />
 
         <div

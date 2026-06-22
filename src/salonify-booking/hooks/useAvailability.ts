@@ -14,7 +14,8 @@ import { Availabilities, SelectedTreatment, DayAvailability } from "../types";
 export function useAvailability(
   supabase: SupabaseClient,
   companyId: string,
-  selectedTreatments: SelectedTreatment[]
+  selectedTreatments: SelectedTreatment[],
+  selectedStaffIds: string[] = []
 ) {
   const [availabilities, setAvailabilities] = useState<Availabilities | null>(
     null
@@ -61,6 +62,9 @@ export function useAvailability(
               endDate,
               treatments,
               companyId,
+              ...(selectedStaffIds.length > 0
+                ? { staffIds: selectedStaffIds }
+                : {}),
             },
           }
         );
@@ -94,7 +98,13 @@ export function useAvailability(
         setLoadingAvailabilities(false);
       }
     },
-    [selectedTreatments, supabase, companyId, loadingAvailabilities]
+    [
+      selectedTreatments,
+      supabase,
+      companyId,
+      loadingAvailabilities,
+      selectedStaffIds,
+    ]
   );
 
   // Smart month fetching - automatically detects and fetches new months

@@ -27,6 +27,7 @@ export function useBookingState(maxDate: Date) {
   );
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+  const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
   const [timeSlots, setTimeSlots] = useState<any[]>([]);
   const [selectedSlotData, setSelectedSlotData] = useState<any>(null);
@@ -121,6 +122,7 @@ export function useBookingState(maxDate: Date) {
     setSelectedTreatments([]);
     setSelectedDay(null);
     setSelectedStaffId(null);
+    setSelectedStaffIds([]);
     setSelectedTimeSlot(null);
     setTimeSlots([]);
     setSelectedSlotData(null);
@@ -167,6 +169,7 @@ export function useBookingState(maxDate: Date) {
     currentEndOfWeek,
     selectedDay,
     selectedStaffId,
+    selectedStaffIds,
     selectedTimeSlot,
     timeSlots,
     selectedSlotData,
@@ -190,6 +193,7 @@ export function useBookingState(maxDate: Date) {
     setCurrentEndOfWeek,
     setSelectedDay,
     setSelectedStaffId,
+    setSelectedStaffIds,
     setSelectedTimeSlot,
     setTimeSlots,
     setSelectedSlotData,
