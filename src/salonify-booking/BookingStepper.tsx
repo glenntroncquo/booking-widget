@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import { Check } from "lucide-react";
 import { cn } from "./utils";
 
@@ -8,6 +9,7 @@ interface BookingStepperProps {
   selectedStaffId: string | null;
   selectedTimeSlot: string | null;
   onStepClick: (step: number) => void;
+  headerRight?: ReactNode;
 }
 
 export function BookingStepper({
@@ -17,12 +19,18 @@ export function BookingStepper({
   selectedStaffId,
   selectedTimeSlot,
   onStepClick,
+  headerRight,
 }: BookingStepperProps) {
   return (
     <div className="px-4 pt-6 pb-4 border-b">
-      <h2 className="text-lg font-bold mb-4 text-center">
-        Boek een afspraak
-      </h2>
+      <div className="relative mb-4">
+        <h2 className="text-lg font-bold text-center">Boek een afspraak</h2>
+        {headerRight && (
+          <div className="absolute right-0 top-1/2 -translate-y-1/2">
+            {headerRight}
+          </div>
+        )}
+      </div>
       <div className="flex items-center justify-between">
         <div
           className="flex flex-col items-center cursor-pointer"

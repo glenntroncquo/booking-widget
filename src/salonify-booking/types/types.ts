@@ -90,6 +90,13 @@ export interface SelectedTreatment {
   option: PriceOption;
 }
 
+export interface StaffOption {
+  id: string;
+  first_name: string;
+  last_name: string;
+  image_path: string | null;
+}
+
 export interface BookingData {
   date: Date;
   timeSlot: string;
