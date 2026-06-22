@@ -64,13 +64,6 @@
   }
 }
 
-@media (max-width: 448px) {
-  html, body, #root {
-    height: 100%;
-    overflow: hidden;
-  }
-}
-
 /* Floating launcher shell (for iframe bottom-right embeds) */
 .salonify-floating-root {
   position: fixed;
@@ -137,20 +130,6 @@
   display: flex;
   flex-direction: column;
   will-change: transform, opacity;
-}
-
-@media (max-width: 448px) {
-  .salonify-floating-anchor {
-    right: 0;
-    bottom: 0;
-  }
-
-  .salonify-floating-panel {
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
-    border-radius: 0;
-  }
 }
 
 .salonify-floating-header {

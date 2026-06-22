@@ -39,19 +39,14 @@ export function BookingConfirmation({
   return (
     <div
       className={cn(
-        "w-full bg-white",
+        "w-full bg-white shadow-xl rounded-xl overflow-hidden border border-gray-100",
         isMobile
-          ? "flex flex-col h-screen overflow-hidden"
-          : "max-w-md mx-auto shadow-xl rounded-xl overflow-hidden border border-gray-100"
+          ? "min-h-[80vh] max-h-[80vh] flex flex-col"
+          : "max-w-md mx-auto"
       )}
       style={themeStyles}
     >
-      <div
-        className="px-4 pb-4 border-b flex items-center"
-        style={isMobile
-          ? { paddingTop: "calc(1.5rem + env(safe-area-inset-top, 0px))" }
-          : { paddingTop: "1.5rem" }}
-      >
+      <div className="px-4 pt-6 pb-4 border-b flex items-center">
         <Button
           variant="ghost"
           size="icon"
@@ -65,8 +60,8 @@ export function BookingConfirmation({
 
       <div
         className={cn(
-          "overflow-y-auto",
-          isMobile ? "flex-1" : "p-4 h-[500px]"
+          isMobile ? "flex-1 overflow-y-auto" : "p-4",
+          "h-[500px] overflow-y-auto"
         )}
       >
         <div className={cn(isMobile ? "p-4" : "", "text-center")}>
