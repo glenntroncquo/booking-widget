@@ -79,7 +79,7 @@ export function StaffSelector({
                   onClick={() => toggleStaff(member.id)}
                   aria-pressed={isSelected}
                   className={cn(
-                    "flex items-center gap-3 px-2 py-2 rounded-lg text-left transition-colors",
+                    "flex items-center gap-3 px-2 py-2 rounded-lg text-left transition-colors outline-none focus:outline-none focus-visible:outline-none focus-visible:bg-gray-50",
                     isSelected ? "bg-salon-primary-light" : "hover:bg-gray-50"
                   )}
                 >
