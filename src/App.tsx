@@ -31,6 +31,7 @@ interface WidgetConfig {
   theme?: SalonTheme;
   maxDate?: Date;
   showStaff?: boolean;
+  staffIds?: string[];
 }
 
 interface ErrorState {
@@ -93,6 +94,15 @@ function App() {
     const showStaff =
       showStaffParam !== null ? showStaffParam.toLowerCase() === "true" : true;
 
+    // Optional staffIds (comma-separated) to preselect/filter staff
+    const staffIdsParam = params.get("staffIds");
+    const staffIds = staffIdsParam
+      ? staffIdsParam
+          .split(",")
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0)
+      : [];
+
     return {
       companyId,
       supabaseUrl,
@@ -100,6 +110,7 @@ function App() {
       theme,
       maxDate,
       showStaff,
+      staffIds,
     };
   }, []);
 
@@ -268,6 +279,7 @@ function App() {
             theme={config.theme}
             maxDate={config.maxDate}
             shouldShowStaff={config.showStaff}
+            initialStaffIds={config.staffIds}
           />
         </FloatingLauncher>
       ) : (
@@ -280,6 +292,7 @@ function App() {
           theme={config.theme}
           maxDate={config.maxDate}
           shouldShowStaff={config.showStaff}
+          initialStaffIds={config.staffIds}
         />
       )}
     </div>

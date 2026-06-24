@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { endOfWeek } from "date-fns";
 import { SelectedTreatment, Treatment } from "../types";
 
-export function useBookingState(maxDate: Date) {
+export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
   // Core booking state
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedTreatments, setSelectedTreatments] = useState<
@@ -27,7 +27,8 @@ export function useBookingState(maxDate: Date) {
   );
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
-  const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
+  const [selectedStaffIds, setSelectedStaffIds] =
+    useState<string[]>(initialStaffIds);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
   const [timeSlots, setTimeSlots] = useState<any[]>([]);
   const [selectedSlotData, setSelectedSlotData] = useState<any>(null);
@@ -122,7 +123,7 @@ export function useBookingState(maxDate: Date) {
     setSelectedTreatments([]);
     setSelectedDay(null);
     setSelectedStaffId(null);
-    setSelectedStaffIds([]);
+    setSelectedStaffIds(initialStaffIds);
     setSelectedTimeSlot(null);
     setTimeSlots([]);
     setSelectedSlotData(null);

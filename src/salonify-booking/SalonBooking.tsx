@@ -49,6 +49,7 @@ export function SalonBooking({
   theme = defaultTheme,
   maxDate = addMonths(new Date(), 3),
   shouldShowStaff = true,
+  initialStaffIds = [],
 }: SalonBookingProps) {
   // Create Supabase client from config
   const supabase = useMemo(() => {
@@ -67,7 +68,7 @@ export function SalonBooking({
   const isMobile = useMediaQuery("(max-width: 448px)");
 
   // Custom hooks for state management
-  const bookingState = useBookingState(maxDate);
+  const bookingState = useBookingState(maxDate, initialStaffIds);
   const availability = useAvailability(
     supabase,
     companyId,

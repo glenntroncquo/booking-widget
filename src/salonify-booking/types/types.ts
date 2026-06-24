@@ -19,6 +19,7 @@ export interface SalonBookingProps {
   theme?: SalonTheme;
   maxDate?: Date;
   shouldShowStaff?: boolean;
+  initialStaffIds?: string[];
 }
 
 export interface TimeSlot {
