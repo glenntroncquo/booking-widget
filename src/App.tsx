@@ -137,22 +137,37 @@ function App() {
       return;
     }
 
+    const {
+      companyId,
+      supabaseUrl,
+      supabaseKey,
+      themeOverrides,
+      maxDate,
+      showStaff,
+      staffIds,
+    } = parseUrlParams;
+
+    // Set configuration immediately so the widget renders without waiting on the
+    // styles fetch. Theme precedence at this point: defaults -> URL params.
+    setConfig({
+      companyId,
+      supabaseUrl,
+      supabaseKey,
+      theme: { ...defaultTheme, ...themeOverrides },
+      maxDate,
+      showStaff,
+      staffIds,
+    });
+    setError(null);
+    setLoading(false);
+    console.log("[Salonify Widget] Configuration set successfully");
+
     let cancelled = false;
 
-    const init = async () => {
-      const {
-        companyId,
-        supabaseUrl,
-        supabaseKey,
-        themeOverrides,
-        maxDate,
-        showStaff,
-        staffIds,
-      } = parseUrlParams;
-
-      // Fetch per-company styles from company_integrations (config.styles).
-      // Falls back gracefully if the row/styles are missing or the query fails.
-      let dbStyles: Partial<SalonTheme> = {};
+    // Fetch per-company styles from company_integrations (config.styles) in the
+    // background and merge them into the theme once available. Falls back
+    // gracefully if the row/styles are missing or the query fails.
+    const loadStyles = async () => {
       try {
         const supabase = createClient(supabaseUrl, supabaseKey);
         const { data, error: fetchError } = await supabase
@@ -162,53 +177,34 @@ function App() {
           .eq("integration_type", "booking")
           .maybeSingle();
 
+        if (cancelled) return;
+
         if (fetchError) {
           console.warn(
             "[Salonify Widget] Failed to load company_integrations styles:",
             fetchError.message
           );
-        } else {
-          const styles = (data?.config as { styles?: Partial<SalonTheme> } | null)
-            ?.styles;
-          if (styles && typeof styles === "object") {
-            dbStyles = styles;
-          }
+          return;
         }
+
+        const styles = (data?.config as { styles?: Partial<SalonTheme> } | null)
+          ?.styles;
+        if (!styles || typeof styles !== "object") return;
+
+        // Theme precedence: defaults -> company_integrations styles -> URL params.
+        setConfig((prev) =>
+          prev
+            ? { ...prev, theme: { ...defaultTheme, ...styles, ...themeOverrides } }
+            : prev
+        );
       } catch (err) {
-        console.warn("[Salonify Widget] Error fetching styles:", err);
+        if (!cancelled) {
+          console.warn("[Salonify Widget] Error fetching styles:", err);
+        }
       }
-
-      if (cancelled) return;
-
-      // Theme precedence: defaults -> company_integrations styles -> URL params.
-      const theme: SalonTheme = {
-        ...defaultTheme,
-        ...dbStyles,
-        ...themeOverrides,
-      };
-
-      console.log("[Salonify Widget] Configuration parsed:", {
-        companyId,
-        supabaseUrl,
-        hasDbStyles: Object.keys(dbStyles).length > 0,
-        hasUrlOverrides: Object.keys(themeOverrides).length > 0,
-      });
-
-      setConfig({
-        companyId,
-        supabaseUrl,
-        supabaseKey,
-        theme,
-        maxDate,
-        showStaff,
-        staffIds,
-      });
-      setError(null);
-      setLoading(false);
-      console.log("[Salonify Widget] Configuration set successfully");
     };
 
-    init();
+    loadStyles();
 
     return () => {
       cancelled = true;
