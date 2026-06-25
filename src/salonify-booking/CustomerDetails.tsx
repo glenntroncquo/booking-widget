@@ -85,7 +85,7 @@ export function CustomerDetails({
                             getImageUrl(
                               staffMember.image_path,
                               supabase,
-                              "company"
+                              "company",
                             ) || undefined
                           }
                           alt={`${staffMember.first_name} ${staffMember.last_name}`}
@@ -274,7 +274,7 @@ export function CustomerDetails({
                 htmlFor="image-upload"
                 className={cn(
                   "cursor-pointer flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-4 w-full",
-                  imageUploading && "opacity-50 cursor-not-allowed"
+                  imageUploading && "opacity-50 cursor-not-allowed",
                 )}
               >
                 <div className="text-center">
@@ -314,4 +314,3 @@ export function CustomerDetails({
     </div>
   );
 }
-
