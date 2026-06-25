@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { createClient } from "@supabase/supabase-js";
 import { SalonBooking } from "./salonify-booking";
 import { FloatingLauncher } from "./components/FloatingLauncher";
 
@@ -68,16 +69,22 @@ function App() {
       return null;
     }
 
-    // Optional theme parameters
-    const theme: SalonTheme = {
-      primary: params.get("primary") || defaultTheme.primary,
-      primaryHover: params.get("primaryHover") || defaultTheme.primaryHover,
-      primaryLight: params.get("primaryLight") || defaultTheme.primaryLight,
-      secondary: params.get("secondary") || defaultTheme.secondary,
-      text: params.get("text") || defaultTheme.text,
-      background: params.get("background") || defaultTheme.background,
-      buttonText: params.get("buttonText") || defaultTheme.buttonText,
-    };
+    // Optional theme parameters: only collect keys explicitly present in the URL
+    // so company_integrations styles can layer underneath them.
+    const themeKeys: (keyof SalonTheme)[] = [
+      "primary",
+      "primaryHover",
+      "primaryLight",
+      "secondary",
+      "text",
+      "background",
+      "buttonText",
+    ];
+    const themeOverrides: Partial<SalonTheme> = {};
+    for (const key of themeKeys) {
+      const value = params.get(key);
+      if (value) themeOverrides[key] = value;
+    }
 
     // Optional maxDate
     let maxDate: Date | undefined;
@@ -107,7 +114,7 @@ function App() {
       companyId,
       supabaseUrl,
       supabaseKey,
-      theme,
+      themeOverrides,
       maxDate,
       showStaff,
       staffIds,
@@ -130,29 +137,82 @@ function App() {
       return;
     }
 
-    try {
+    let cancelled = false;
+
+    const init = async () => {
+      const {
+        companyId,
+        supabaseUrl,
+        supabaseKey,
+        themeOverrides,
+        maxDate,
+        showStaff,
+        staffIds,
+      } = parseUrlParams;
+
+      // Fetch per-company styles from company_integrations (config.styles).
+      // Falls back gracefully if the row/styles are missing or the query fails.
+      let dbStyles: Partial<SalonTheme> = {};
+      try {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        const { data, error: fetchError } = await supabase
+          .from("company_integrations")
+          .select("config")
+          .eq("company_id", companyId)
+          .eq("integration_type", "booking")
+          .maybeSingle();
+
+        if (fetchError) {
+          console.warn(
+            "[Salonify Widget] Failed to load company_integrations styles:",
+            fetchError.message
+          );
+        } else {
+          const styles = (data?.config as { styles?: Partial<SalonTheme> } | null)
+            ?.styles;
+          if (styles && typeof styles === "object") {
+            dbStyles = styles;
+          }
+        }
+      } catch (err) {
+        console.warn("[Salonify Widget] Error fetching styles:", err);
+      }
+
+      if (cancelled) return;
+
+      // Theme precedence: defaults -> company_integrations styles -> URL params.
+      const theme: SalonTheme = {
+        ...defaultTheme,
+        ...dbStyles,
+        ...themeOverrides,
+      };
+
       console.log("[Salonify Widget] Configuration parsed:", {
-        companyId: parseUrlParams.companyId,
-        supabaseUrl: parseUrlParams.supabaseUrl,
-        hasTheme: !!parseUrlParams.theme,
+        companyId,
+        supabaseUrl,
+        hasDbStyles: Object.keys(dbStyles).length > 0,
+        hasUrlOverrides: Object.keys(themeOverrides).length > 0,
       });
-      
-      // Set configuration (the package will handle Supabase client creation internally)
-      setConfig(parseUrlParams);
+
+      setConfig({
+        companyId,
+        supabaseUrl,
+        supabaseKey,
+        theme,
+        maxDate,
+        showStaff,
+        staffIds,
+      });
       setError(null);
-      console.log("[Salonify Widget] Configuration set successfully");
-    } catch (err) {
-      console.error("[Salonify Widget] Configuration error:", err);
-      setError({
-        title: "Configuration Error",
-        message:
-          err instanceof Error
-            ? err.message
-            : "Failed to initialize the booking widget.",
-      });
-    } finally {
       setLoading(false);
-    }
+      console.log("[Salonify Widget] Configuration set successfully");
+    };
+
+    init();
+
+    return () => {
+      cancelled = true;
+    };
   }, [parseUrlParams]);
 
   // Send ready event to parent window when widget is loaded
