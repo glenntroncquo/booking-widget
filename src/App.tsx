@@ -61,11 +61,12 @@ function App() {
     const params = new URLSearchParams(window.location.search);
 
     const companyId = params.get("companyId");
+    const companySlug = params.get("companySlug");
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
     const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
-    // Required: companyId from URL; supabaseUrl and supabaseKey from env
-    if (!companyId || !supabaseUrl || !supabaseKey) {
+    // Required: companyId OR companySlug from URL; supabaseUrl and supabaseKey from env
+    if ((!companyId && !companySlug) || !supabaseUrl || !supabaseKey) {
       return null;
     }
 
@@ -101,23 +102,27 @@ function App() {
     const showStaff =
       showStaffParam !== null ? showStaffParam.toLowerCase() === "true" : true;
 
-    // Optional staffIds (comma-separated) to preselect/filter staff
-    const staffIdsParam = params.get("staffIds");
-    const staffIds = staffIdsParam
-      ? staffIdsParam
-          .split(",")
-          .map((id) => id.trim())
-          .filter((id) => id.length > 0)
-      : [];
+    // Optional staffIds / staffSlugs (comma-separated) to preselect/filter staff
+    const parseList = (value: string | null) =>
+      value
+        ? value
+            .split(",")
+            .map((v) => v.trim())
+            .filter((v) => v.length > 0)
+        : [];
+    const staffIds = parseList(params.get("staffIds"));
+    const staffSlugs = parseList(params.get("staffSlugs"));
 
     return {
       companyId,
+      companySlug,
       supabaseUrl,
       supabaseKey,
       themeOverrides,
       maxDate,
       showStaff,
       staffIds,
+      staffSlugs,
     };
   }, []);
 
@@ -131,45 +136,72 @@ function App() {
       setError({
         title: "Missing Required Parameters",
         message:
-          "Please provide companyId as a URL parameter, and configure Supabase via environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).",
+          "Please provide companyId or companySlug as a URL parameter, and configure Supabase via environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).",
       });
       setLoading(false);
       return;
     }
 
     const {
-      companyId,
+      companyId: companyIdParam,
+      companySlug,
       supabaseUrl,
       supabaseKey,
       themeOverrides,
       maxDate,
       showStaff,
-      staffIds,
+      staffIds: staffIdsParam,
+      staffSlugs,
     } = parseUrlParams;
 
-    // Set configuration immediately so the widget renders without waiting on the
-    // styles fetch. Theme precedence at this point: defaults -> URL params.
-    setConfig({
-      companyId,
-      supabaseUrl,
-      supabaseKey,
-      theme: { ...defaultTheme, ...themeOverrides },
-      maxDate,
-      showStaff,
-      staffIds,
-    });
-    setError(null);
-    setLoading(false);
-    console.log("[Salonify Widget] Configuration set successfully");
-
     let cancelled = false;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch per-company styles from company_integrations (config.styles) in the
-    // background and merge them into the theme once available. Falls back
-    // gracefully if the row/styles are missing or the query fails.
-    const loadStyles = async () => {
+    // Resolve a company slug to its id. A companyId in the URL takes precedence.
+    const resolveCompanyId = async (): Promise<string | null> => {
+      if (companyIdParam) return companyIdParam;
+      const { data, error: fetchError } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("slug", companySlug)
+        .maybeSingle();
+      if (fetchError) {
+        console.warn(
+          "[Salonify Widget] Failed to resolve company slug:",
+          fetchError.message
+        );
+        return null;
+      }
+      return (data?.id as string | undefined) ?? null;
+    };
+
+    // Resolve staff slugs to ids within the company. Explicit staffIds are kept
+    // as-is and merged with any resolved slugs (de-duplicated).
+    const resolveStaffIds = async (companyId: string): Promise<string[]> => {
+      if (staffSlugs.length === 0) return staffIdsParam;
+      const { data, error: fetchError } = await supabase
+        .from("staff")
+        .select("id")
+        .eq("company_id", companyId)
+        .in("slug", staffSlugs);
+      if (fetchError) {
+        console.warn(
+          "[Salonify Widget] Failed to resolve staff slugs:",
+          fetchError.message
+        );
+        return staffIdsParam;
+      }
+      const resolved = Array.isArray(data)
+        ? data.map((row) => row.id as string)
+        : [];
+      return Array.from(new Set([...staffIdsParam, ...resolved]));
+    };
+
+    // Fetch per-company styles from company_integrations (config.styles) and
+    // merge them into the theme. Falls back gracefully if missing or the query
+    // fails. Theme precedence: defaults -> company_integrations styles -> URL params.
+    const loadStyles = async (companyId: string): Promise<SalonTheme> => {
       try {
-        const supabase = createClient(supabaseUrl, supabaseKey);
         const { data, error: fetchError } = await supabase
           .from("company_integrations")
           .select("config")
@@ -177,34 +209,61 @@ function App() {
           .eq("integration_type", "booking")
           .maybeSingle();
 
-        if (cancelled) return;
-
         if (fetchError) {
           console.warn(
             "[Salonify Widget] Failed to load company_integrations styles:",
             fetchError.message
           );
-          return;
+          return { ...defaultTheme, ...themeOverrides };
         }
 
         const styles = (data?.config as { styles?: Partial<SalonTheme> } | null)
           ?.styles;
-        if (!styles || typeof styles !== "object") return;
-
-        // Theme precedence: defaults -> company_integrations styles -> URL params.
-        setConfig((prev) =>
-          prev
-            ? { ...prev, theme: { ...defaultTheme, ...styles, ...themeOverrides } }
-            : prev
-        );
-      } catch (err) {
-        if (!cancelled) {
-          console.warn("[Salonify Widget] Error fetching styles:", err);
+        if (!styles || typeof styles !== "object") {
+          return { ...defaultTheme, ...themeOverrides };
         }
+        return { ...defaultTheme, ...styles, ...themeOverrides };
+      } catch (err) {
+        console.warn("[Salonify Widget] Error fetching styles:", err);
+        return { ...defaultTheme, ...themeOverrides };
       }
     };
 
-    loadStyles();
+    const initialize = async () => {
+      const companyId = await resolveCompanyId();
+      if (cancelled) return;
+
+      if (!companyId) {
+        setError({
+          title: "Company Not Found",
+          message:
+            "Could not resolve the company from the provided companyId or companySlug.",
+        });
+        setLoading(false);
+        return;
+      }
+
+      const [staffIds, theme] = await Promise.all([
+        resolveStaffIds(companyId),
+        loadStyles(companyId),
+      ]);
+      if (cancelled) return;
+
+      setConfig({
+        companyId,
+        supabaseUrl,
+        supabaseKey,
+        theme,
+        maxDate,
+        showStaff,
+        staffIds,
+      });
+      setError(null);
+      setLoading(false);
+      console.log("[Salonify Widget] Configuration set successfully");
+    };
+
+    initialize();
 
     return () => {
       cancelled = true;
