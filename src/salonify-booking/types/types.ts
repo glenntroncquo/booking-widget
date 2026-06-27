@@ -97,6 +97,7 @@ export interface StaffOption {
   first_name: string;
   last_name: string;
   image_path: string | null;
+  slug: string | null;
 }
 
 export interface BookingData {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   format,
   addDays,
@@ -233,6 +233,26 @@ export function SalonBooking({
       cancelled = true;
     };
   }, [supabase, companyId, staffFilterKey, staffSlugKey]);
+
+  // Pre-select staff from the URL slugs once the staff list (which now includes
+  // slugs) has loaded. Only applies the initial selection; user changes win.
+  const slugSelectionAppliedRef = useRef(false);
+  useEffect(() => {
+    if (slugSelectionAppliedRef.current) return;
+    if (initialStaffSlugs.length === 0) return;
+    if (staffList.loading || staffList.staff.length === 0) return;
+
+    const slugSet = new Set(initialStaffSlugs);
+    const matchedIds = staffList.staff
+      .filter((member) => member.slug != null && slugSet.has(member.slug))
+      .map((member) => member.id);
+
+    slugSelectionAppliedRef.current = true;
+    if (matchedIds.length > 0) {
+      bookingState.setSelectedStaffIds(matchedIds);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staffSlugKey, staffList.loading, staffList.staff]);
 
   // Update time slots for a selected day and staff member
   const updateTimeSlotsForSelectedDay = useCallback(
