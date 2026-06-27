@@ -50,6 +50,7 @@ export function SalonBooking({
   maxDate = addMonths(new Date(), 3),
   shouldShowStaff = true,
   initialStaffIds = [],
+  initialStaffSlugs = [],
 }: SalonBookingProps) {
   // Create Supabase client from config
   const supabase = useMemo(() => {
@@ -185,6 +186,7 @@ export function SalonBooking({
 
   // Fetch treatments, optionally filtered by the selected staff
   const staffFilterKey = JSON.stringify(bookingState.selectedStaffIds);
+  const staffSlugKey = JSON.stringify(initialStaffSlugs);
   useEffect(() => {
     let cancelled = false;
 
@@ -192,12 +194,14 @@ export function SalonBooking({
       setLoading(true);
       try {
         const staffIds: string[] = JSON.parse(staffFilterKey);
+        const staffSlugs: string[] = JSON.parse(staffSlugKey);
         const { data, error } = await supabase.functions.invoke(
           "get-treatments",
           {
             body: {
               company_id: companyId,
               ...(staffIds.length > 0 ? { staff_ids: staffIds } : {}),
+              ...(staffSlugs.length > 0 ? { staff_slugs: staffSlugs } : {}),
             },
           }
         );
@@ -228,7 +232,7 @@ export function SalonBooking({
     return () => {
       cancelled = true;
     };
-  }, [supabase, companyId, staffFilterKey]);
+  }, [supabase, companyId, staffFilterKey, staffSlugKey]);
 
   // Update time slots for a selected day and staff member
   const updateTimeSlotsForSelectedDay = useCallback(

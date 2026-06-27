@@ -33,6 +33,7 @@ interface WidgetConfig {
   maxDate?: Date;
   showStaff?: boolean;
   staffIds?: string[];
+  staffSlugs?: string[];
 }
 
 interface ErrorState {
@@ -175,28 +176,6 @@ function App() {
       return (data?.id as string | undefined) ?? null;
     };
 
-    // Resolve staff slugs to ids within the company. Explicit staffIds are kept
-    // as-is and merged with any resolved slugs (de-duplicated).
-    const resolveStaffIds = async (companyId: string): Promise<string[]> => {
-      if (staffSlugs.length === 0) return staffIdsParam;
-      const { data, error: fetchError } = await supabase
-        .from("staff")
-        .select("id")
-        .eq("company_id", companyId)
-        .in("slug", staffSlugs);
-      if (fetchError) {
-        console.warn(
-          "[Salonify Widget] Failed to resolve staff slugs:",
-          fetchError.message
-        );
-        return staffIdsParam;
-      }
-      const resolved = Array.isArray(data)
-        ? data.map((row) => row.id as string)
-        : [];
-      return Array.from(new Set([...staffIdsParam, ...resolved]));
-    };
-
     // Fetch per-company styles from company_integrations (config.styles) and
     // merge them into the theme. Falls back gracefully if missing or the query
     // fails. Theme precedence: defaults -> company_integrations styles -> URL params.
@@ -243,10 +222,7 @@ function App() {
         return;
       }
 
-      const [staffIds, theme] = await Promise.all([
-        resolveStaffIds(companyId),
-        loadStyles(companyId),
-      ]);
+      const theme = await loadStyles(companyId);
       if (cancelled) return;
 
       setConfig({
@@ -256,7 +232,8 @@ function App() {
         theme,
         maxDate,
         showStaff,
-        staffIds,
+        staffIds: staffIdsParam,
+        staffSlugs,
       });
       setError(null);
       setLoading(false);
@@ -395,6 +372,7 @@ function App() {
             maxDate={config.maxDate}
             shouldShowStaff={config.showStaff}
             initialStaffIds={config.staffIds}
+            initialStaffSlugs={config.staffSlugs}
           />
         </FloatingLauncher>
       ) : (
@@ -408,6 +386,7 @@ function App() {
           maxDate={config.maxDate}
           shouldShowStaff={config.showStaff}
           initialStaffIds={config.staffIds}
+          initialStaffSlugs={config.staffSlugs}
         />
       )}
     </div>
