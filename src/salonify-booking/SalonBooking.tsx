@@ -235,10 +235,18 @@ export function SalonBooking({
   }, [supabase, companyId, staffFilterKey, staffSlugKey]);
 
   // Pre-select staff from the URL slugs once the staff list (which now includes
-  // slugs) has loaded. Only applies the initial selection; user changes win.
+  // slugs) has loaded. This seeds the default selection exactly once and merges
+  // with any ids already seeded from the URL. It must never re-apply after the
+  // user has changed the staff selection, otherwise a deselected (pre-selected)
+  // staff member would reappear when the staff list finishes loading.
   const slugSelectionAppliedRef = useRef(false);
   useEffect(() => {
     if (slugSelectionAppliedRef.current) return;
+    // The user already interacted; URL defaults must not override their choice.
+    if (bookingState.hasUserChangedStaff.current) {
+      slugSelectionAppliedRef.current = true;
+      return;
+    }
     if (initialStaffSlugs.length === 0) return;
     if (staffList.loading || staffList.staff.length === 0) return;
 
@@ -249,7 +257,11 @@ export function SalonBooking({
 
     slugSelectionAppliedRef.current = true;
     if (matchedIds.length > 0) {
-      bookingState.setSelectedStaffIds(matchedIds);
+      // Merge with any ids already seeded from the URL so both param forms
+      // contribute to the initial default without duplicating entries.
+      bookingState.setSelectedStaffIds((prev) =>
+        Array.from(new Set([...prev, ...matchedIds]))
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [staffSlugKey, staffList.loading, staffList.staff]);
@@ -980,7 +992,7 @@ export function SalonBooking({
                 selectedStaffIds={bookingState.selectedStaffIds}
                 loading={staffList.loading}
                 supabase={supabase}
-                onChange={bookingState.setSelectedStaffIds}
+                onChange={bookingState.handleStaffSelectionChange}
               />
             ) : null
           }

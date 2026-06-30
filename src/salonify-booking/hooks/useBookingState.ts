@@ -40,6 +40,16 @@ export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
   // Refs for tracking user actions
   const hasAutoSelectedToday = useRef(false);
   const isManuallySelecting = useRef(false);
+  // Becomes true the first time the user changes the staff selection. Once set,
+  // URL-param-derived defaults (ids/slugs) must never re-apply over the choice.
+  const hasUserChangedStaff = useRef(false);
+
+  // Wraps staff selection changes coming from user interaction so that any
+  // URL-seeded defaults stop being re-applied afterwards.
+  const handleStaffSelectionChange = (staffIds: string[]) => {
+    hasUserChangedStaff.current = true;
+    setSelectedStaffIds(staffIds);
+  };
 
   // Treatment selection handlers
   const handleTreatmentOptionSelect = (treatment: Treatment, option: any) => {
@@ -178,6 +188,7 @@ export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
     calendarMonth,
     hasAutoSelectedToday,
     isManuallySelecting,
+    hasUserChangedStaff,
 
     // Setters
     setCurrentStep,
@@ -202,6 +213,7 @@ export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
     setCalendarMonth,
 
     // Handlers
+    handleStaffSelectionChange,
     handleTreatmentOptionSelect,
     removeTreatment,
     handleNextStep,
