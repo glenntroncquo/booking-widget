@@ -958,7 +958,7 @@ export function SalonBooking({
         className={cn(
           "w-full bg-white overflow-hidden relative flex flex-col",
           isMobile
-            ? ""
+            ? "h-full"
             : "shadow-xl rounded-xl border border-gray-100 max-w-md mx-auto"
         )}
         style={themeStyles}
@@ -986,7 +986,12 @@ export function SalonBooking({
           }
         />
 
-        <div className="p-4">
+        <div
+          className={cn(
+            "p-4 overflow-y-auto",
+            isMobile ? "flex-1 min-h-0" : "h-[500px]"
+          )}
+        >
             {bookingState.currentStep === 1 && (
               <TreatmentSelection
                 treatments={treatments}

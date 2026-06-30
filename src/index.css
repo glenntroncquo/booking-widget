@@ -27,6 +27,22 @@
     overflow-x: hidden;
   }
 
+  /* On mobile the widget fills the iframe it lives in, so the stepper/footer
+     stay pinned and only the middle scrolls. The host iframe controls the
+     actual available height (e.g. 100dvh on booking.salonify.co, or whatever
+     space a customer's layout gives it). On desktop the widget is a
+     content-sized card, so heights stay auto. */
+  @media (max-width: 448px) {
+    html,
+    body {
+      height: 100%;
+    }
+    #root,
+    .widget-container {
+      height: 100%;
+    }
+  }
+
   body {
     @apply antialiased text-salon-text-dark;
     font-family: "Inter", sans-serif;
