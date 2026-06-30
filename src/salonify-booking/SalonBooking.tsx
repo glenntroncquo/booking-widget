@@ -184,7 +184,11 @@ export function SalonBooking({
     }
   };
 
-  // Fetch treatments, optionally filtered by the selected staff
+  // Fetch treatments, optionally filtered by the selected staff.
+  // The selected staff ids are the single source of truth for filtering. URL
+  // slugs only seed the initial selection (resolved to ids in the slug effect
+  // below); they must NOT be sent as a standalone filter, otherwise deselecting
+  // the pre-selected staff would still keep them applied at the API level.
   const staffFilterKey = JSON.stringify(bookingState.selectedStaffIds);
   const staffSlugKey = JSON.stringify(initialStaffSlugs);
   useEffect(() => {
@@ -194,14 +198,12 @@ export function SalonBooking({
       setLoading(true);
       try {
         const staffIds: string[] = JSON.parse(staffFilterKey);
-        const staffSlugs: string[] = JSON.parse(staffSlugKey);
         const { data, error } = await supabase.functions.invoke(
           "get-treatments",
           {
             body: {
               company_id: companyId,
               ...(staffIds.length > 0 ? { staff_ids: staffIds } : {}),
-              ...(staffSlugs.length > 0 ? { staff_slugs: staffSlugs } : {}),
             },
           }
         );
@@ -232,7 +234,7 @@ export function SalonBooking({
     return () => {
       cancelled = true;
     };
-  }, [supabase, companyId, staffFilterKey, staffSlugKey]);
+  }, [supabase, companyId, staffFilterKey]);
 
   // Pre-select staff from the URL slugs once the staff list (which now includes
   // slugs) has loaded. This seeds the default selection exactly once and merges
