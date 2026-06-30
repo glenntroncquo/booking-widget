@@ -263,6 +263,45 @@ function App() {
     }
   }, [config]);
 
+  // Report content height to the parent window so the host iframe can
+  // auto-resize to fit the widget (no inner scrollbars). Only relevant for
+  // the inline display mode embedded in an iframe.
+  useEffect(() => {
+    if (!config) return;
+    if (displayMode === "floating") return;
+    if (!window.parent || window.parent === window) return;
+
+    let lastHeight = 0;
+
+    const sendHeight = () => {
+      const height = Math.ceil(
+        document.documentElement.getBoundingClientRect().height
+      );
+      if (height > 0 && height !== lastHeight) {
+        lastHeight = height;
+        window.parent.postMessage(
+          {
+            type: "salonify-widget-resize",
+            source: "salonify-booking-widget",
+            height,
+          },
+          "*"
+        );
+      }
+    };
+
+    sendHeight();
+
+    const observer = new ResizeObserver(() => sendHeight());
+    observer.observe(document.documentElement);
+    window.addEventListener("resize", sendHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", sendHeight);
+    };
+  }, [config, displayMode]);
+
   // Listen for postMessage from parent window
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {

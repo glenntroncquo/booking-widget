@@ -35,6 +35,15 @@ export default function AppointmentPage() {
           "*" // In production, specify the origin
         );
       }
+
+      // Auto-resize the iframe to fit the widget content (no inner scrollbar)
+      if (
+        event.data?.type === "salonify-widget-resize" &&
+        event.data.height &&
+        iframeRef.current
+      ) {
+        iframeRef.current.style.height = `${event.data.height}px`;
+      }
     };
 
     window.addEventListener("message", handleMessage);
@@ -64,8 +73,9 @@ export default function AppointmentPage() {
             ref={iframeRef}
             src={`${import.meta.env.VITE_WIDGET_URL}?companyId=${import.meta.env.VITE_COMPANY_ID}&supabaseUrl=${import.meta.env.VITE_SUPABASE_URL}&supabaseKey=${import.meta.env.VITE_SUPABASE_ANON_KEY}`}
             width="100%"
-            height="700px"
+            height="600px"
             frameBorder="0"
+            scrolling="no"
             onLoad={handleIframeLoad}
             className="rounded-xl shadow-xl"
           />

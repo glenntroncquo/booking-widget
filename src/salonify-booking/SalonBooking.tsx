@@ -956,9 +956,9 @@ export function SalonBooking({
 
       <div
         className={cn(
-          "w-full bg-white overflow-hidden relative",
+          "w-full bg-white overflow-hidden relative flex flex-col",
           isMobile
-            ? "h-[100dvh] min-h-[100dvh] flex flex-col"
+            ? ""
             : "shadow-xl rounded-xl border border-gray-100 max-w-md mx-auto"
         )}
         style={themeStyles}
@@ -986,14 +986,7 @@ export function SalonBooking({
           }
         />
 
-        <div
-          className={cn(
-            isMobile
-              ? "flex-1 min-h-0 overflow-y-auto"
-              : "p-4 h-[500px] overflow-y-auto"
-          )}
-        >
-          <div className={cn(isMobile ? "p-4" : "")}>
+        <div className="p-4">
             {bookingState.currentStep === 1 && (
               <TreatmentSelection
                 treatments={treatments}
@@ -1073,7 +1066,6 @@ export function SalonBooking({
                 onRemoveImage={imageUpload.removeImage}
               />
             )}
-          </div>
         </div>
 
         <BookingFooter

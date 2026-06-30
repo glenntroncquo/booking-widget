@@ -40,21 +40,46 @@ Embed the widget in any website using an iframe. You can use either the root URL
 **Option 1: Using `/widget` path (Recommended)**
 ```html
 <iframe 
+  id="salonify-widget"
   src="https://your-domain.com/widget?companyId=xxx&supabaseUrl=xxx&supabaseKey=xxx"
   width="100%" 
   height="600px"
   frameborder="0"
+  scrolling="no"
 ></iframe>
 ```
 
 **Option 2: Using root path**
 ```html
 <iframe 
+  id="salonify-widget"
   src="https://your-domain.com/?companyId=xxx&supabaseUrl=xxx&supabaseKey=xxx"
   width="100%" 
   height="600px"
   frameborder="0"
+  scrolling="no"
 ></iframe>
+```
+
+> The `height` here is only an initial value. Add the auto-resize snippet below so
+> the iframe grows/shrinks to fit the widget content (no inner scrollbar, the whole
+> form is always visible).
+
+### Auto-resizing the iframe (recommended)
+
+The widget reports its content height to the parent window via `postMessage`
+(`{ type: "salonify-widget-resize", height }`). Listen for it and update the
+iframe height so the form is never cut off and there's no inner scrollbar:
+
+```javascript
+const iframe = document.getElementById("salonify-widget");
+
+window.addEventListener("message", (event) => {
+  // In production, validate event.origin against your widget domain
+  if (event.data?.type === "salonify-widget-resize" && event.data.height) {
+    iframe.style.height = event.data.height + "px";
+  }
+});
 ```
 
 ### Required Parameters
@@ -164,6 +189,11 @@ function AppointmentPage() {
           },
         }, "*");
       }
+
+      // Auto-resize the iframe to fit the widget content
+      if (event.data.type === "salonify-widget-resize" && event.data.height && iframeRef.current) {
+        iframeRef.current.style.height = event.data.height + "px";
+      }
     };
 
     window.addEventListener("message", handleMessage);
@@ -177,6 +207,7 @@ function AppointmentPage() {
       width="100%"
       height="600px"
       frameBorder="0"
+      scrolling="no"
     />
   );
 }
