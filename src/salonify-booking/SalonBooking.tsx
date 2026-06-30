@@ -956,10 +956,10 @@ export function SalonBooking({
 
       <div
         className={cn(
-          "w-full bg-white shadow-xl rounded-xl overflow-hidden border border-gray-100 relative",
+          "w-full bg-white overflow-hidden relative",
           isMobile
-            ? "min-h-[80vh] max-h-[80vh] flex flex-col"
-            : "max-w-md mx-auto"
+            ? "h-[100dvh] min-h-[100dvh] flex flex-col"
+            : "shadow-xl rounded-xl border border-gray-100 max-w-md mx-auto"
         )}
         style={themeStyles}
       >
@@ -988,8 +988,9 @@ export function SalonBooking({
 
         <div
           className={cn(
-            isMobile ? "flex-1 overflow-y-auto" : "p-4",
-            "h-[500px] overflow-y-auto"
+            isMobile
+              ? "flex-1 min-h-0 overflow-y-auto"
+              : "p-4 h-[500px] overflow-y-auto"
           )}
         >
           <div className={cn(isMobile ? "p-4" : "")}>
