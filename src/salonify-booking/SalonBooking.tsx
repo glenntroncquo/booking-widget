@@ -199,7 +199,7 @@ export function SalonBooking({
       try {
         const staffIds: string[] = JSON.parse(staffFilterKey);
         const { data, error } = await supabase.functions.invoke(
-          "get-treatments",
+          "treatment-list",
           {
             body: {
               company_id: companyId,

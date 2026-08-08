@@ -12,7 +12,7 @@ export function useStaff(supabase: SupabaseClient, companyId: string) {
     async function fetchStaff() {
       setLoading(true);
       try {
-        const { data, error } = await supabase.functions.invoke("get-staff", {
+        const { data, error } = await supabase.functions.invoke("staff-list", {
           body: { company_id: companyId },
         });
 
