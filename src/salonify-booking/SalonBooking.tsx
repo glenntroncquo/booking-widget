@@ -740,7 +740,7 @@ export function SalonBooking({
 
       const referralCodeTrimmed = bookingState.referralCode.trim();
 
-      const response = await supabase.functions.invoke("book-appointmentv2", {
+      const response = await supabase.functions.invoke("appointment-create", {
         body: {
           start: startTimeUTC.toISOString(),
           end: endTimeUTC.toISOString(),
