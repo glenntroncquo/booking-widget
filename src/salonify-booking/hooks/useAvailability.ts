@@ -55,7 +55,7 @@ export function useAvailability(
         }));
 
         const { data, error } = await supabase.functions.invoke(
-          "get-availabilities",
+          "availability-list",
           {
             body: {
               startDate,
