@@ -127,7 +127,7 @@ export function SalonBooking({
 
     try {
       const response = await supabase.functions.invoke(
-        "send-appointment-history",
+        "appointment-notify-history-email",
         {
           body: {
             email: email.trim(),
