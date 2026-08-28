@@ -162,7 +162,7 @@ function App() {
     const resolveCompanyId = async (): Promise<string | null> => {
       if (companyIdParam) return companyIdParam;
       const { data, error: fetchError } = await supabase
-        .from("companies")
+        .from("company")
         .select("id")
         .eq("slug", companySlug)
         .maybeSingle();

@@ -4,7 +4,7 @@ import { nl } from "date-fns/locale";
 import { Check, ArrowLeft } from "lucide-react";
 import { Button } from "./components/button";
 import { cn, getImageUrl } from "./utils";
-import { BookingData, Availabilities, SalonTheme } from "./types/types";
+import { BookingData, Availabilities, SalonTheme, StaffOption } from "./types/types";
 import { useMediaQuery } from "./components/use-mobile";
 import { SupabaseClient } from "@supabase/supabase-js";
 
@@ -12,6 +12,7 @@ interface BookingConfirmationProps {
   bookingData: BookingData;
   selectedStaffId: string | null;
   availabilities: Availabilities | null;
+  staff: StaffOption[];
   theme: SalonTheme;
   supabase: SupabaseClient;
   onResetToStep1: () => void;
@@ -21,6 +22,7 @@ export function BookingConfirmation({
   bookingData,
   selectedStaffId,
   availabilities,
+  staff,
   theme,
   supabase,
   onResetToStep1,
@@ -35,6 +37,30 @@ export function BookingConfirmation({
     "--salon-text": theme.text,
     "--salon-background": theme.background,
   } as React.CSSProperties;
+
+  const uniqueStaffIds = Array.from(
+    new Set(
+      bookingData.services
+        .map((item) => item.staffId)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  const previewStaffId = uniqueStaffIds[0] ?? selectedStaffId;
+
+  const previewImagePath = (() => {
+    if (previewStaffId) {
+      const fromList = staff.find((member) => member.id === previewStaffId);
+      if (fromList?.image_path) return fromList.image_path;
+    }
+    if (previewStaffId && availabilities && bookingData.date) {
+      const dateKey = format(bookingData.date, "yyyy-MM-dd");
+      return (
+        availabilities.dates[dateKey]?.staff?.[previewStaffId]?.image_path ??
+        null
+      );
+    }
+    return null;
+  })();
 
   return (
     <div
@@ -90,34 +116,20 @@ export function BookingConfirmation({
 
               {bookingData.staffName && (
                 <div>
-                  <div className="text-sm font-semibold text-gray-700"></div>
                   <div className="flex items-center gap-2">
-                    {selectedStaffId && availabilities && bookingData.date && (
-                      <>
-                        {(() => {
-                          const dateKey = format(bookingData.date, "yyyy-MM-dd");
-                          const dayAvailability = availabilities.dates[dateKey];
-                          const staffMember =
-                            dayAvailability?.staff[selectedStaffId];
-                          return staffMember?.image_path ? (
-                            <img
-                              src={
-                                getImageUrl(
-                                  staffMember.image_path,
-                                  supabase,
-                                  "company"
-                                ) || undefined
-                              }
-                              alt={bookingData.staffName}
-                              className="w-6 h-6 rounded-full object-cover"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = "none";
-                              }}
-                            />
-                          ) : null;
-                        })()}
-                      </>
+                    {previewImagePath && (
+                      <img
+                        src={
+                          getImageUrl(previewImagePath, supabase, "company") ||
+                          undefined
+                        }
+                        alt={bookingData.staffName}
+                        className="w-6 h-6 rounded-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = "none";
+                        }}
+                      />
                     )}
                     <span className="text-sm text-gray-600">
                       {bookingData.staffName}
@@ -125,6 +137,14 @@ export function BookingConfirmation({
                   </div>
                 </div>
               )}
+
+              <div className="space-y-1 pt-1">
+                {bookingData.services.map((item, index) => (
+                  <div key={index} className="text-sm text-gray-600">
+                    {item.service.name} - {item.variant.name}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -142,4 +162,3 @@ export function BookingConfirmation({
     </div>
   );
 }
-

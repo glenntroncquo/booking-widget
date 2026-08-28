@@ -9,12 +9,13 @@ import {
   startOfWeek,
 } from "date-fns";
 import { SupabaseClient } from "@supabase/supabase-js";
-import { Availabilities, SelectedTreatment, DayAvailability } from "../types";
+import { Availabilities, SelectedService, DayAvailability } from "../types";
+import { invokeAvailabilityList } from "../api";
 
 export function useAvailability(
   supabase: SupabaseClient,
   companyId: string,
-  selectedTreatments: SelectedTreatment[],
+  selectedServices: SelectedService[],
   selectedStaffIds: string[] = []
 ) {
   const [availabilities, setAvailabilities] = useState<Availabilities | null>(
@@ -25,23 +26,19 @@ export function useAvailability(
     []
   );
 
-  // Track which months we've already fetched to avoid duplicate requests
   const fetchedMonths = useRef<Set<string>>(new Set());
 
-  // Helper function to get month key
   const getMonthKey = (date: Date): string => {
     return `${getYear(date)}-${getMonth(date)}`;
   };
 
-  // Fetch availabilities for a specific month
   const fetchMonthAvailabilities = useCallback(
     async (month: Date) => {
-      if (selectedTreatments.length === 0) return;
+      if (selectedServices.length === 0) return;
       if (loadingAvailabilities) return;
 
       const monthKey = getMonthKey(month);
 
-      // Skip if we've already fetched this month
       if (fetchedMonths.current.has(monthKey)) return;
 
       setLoadingAvailabilities(true);
@@ -49,25 +46,21 @@ export function useAvailability(
         const startDate = format(startOfMonth(month), "yyyy-MM-dd");
         const endDate = format(endOfMonth(month), "yyyy-MM-dd");
 
-        const treatments = selectedTreatments.map((item) => ({
-          treatmentId: item.treatment.id,
-          priceOptionId: item.option.id,
+        const services = selectedServices.map((item) => ({
+          serviceId: item.service.id,
+          serviceVariantId: item.variant.id,
+          ...(item.staffId ? { staffId: item.staffId } : {}),
         }));
 
-        const { data, error } = await supabase.functions.invoke(
-          "availability-list",
-          {
-            body: {
-              startDate,
-              endDate,
-              treatments,
-              companyId,
-              ...(selectedStaffIds.length > 0
-                ? { staffIds: selectedStaffIds }
-                : {}),
-            },
-          }
-        );
+        const { data, error } = await invokeAvailabilityList(supabase, {
+          startDate,
+          endDate,
+          services,
+          companyId,
+          ...(selectedStaffIds.length > 0
+            ? { staffIds: selectedStaffIds }
+            : {}),
+        });
 
         if (error) {
           console.error("Error fetching month availabilities:", error);
@@ -89,7 +82,6 @@ export function useAvailability(
             };
           });
 
-          // Mark this month as fetched
           fetchedMonths.current.add(monthKey);
         }
       } catch (err) {
@@ -99,7 +91,7 @@ export function useAvailability(
       }
     },
     [
-      selectedTreatments,
+      selectedServices,
       supabase,
       companyId,
       loadingAvailabilities,
@@ -107,47 +99,39 @@ export function useAvailability(
     ]
   );
 
-  // Smart month fetching - automatically detects and fetches new months
   const fetchRequiredMonths = useCallback(
     async (currentEndOfWeek: Date, weeksToShow: number = 2) => {
-      if (selectedTreatments.length === 0) return;
+      if (selectedServices.length === 0) return;
       if (loadingAvailabilities) return;
 
       const monthsToFetch: Date[] = [];
 
-      // Calculate the range of dates we need to show
-      // Use week start (Monday) instead of week end to ensure we fetch the correct month
       const weekStart = startOfWeek(currentEndOfWeek, { weekStartsOn: 1 });
       const startDate = new Date(weekStart);
       const endDate = addDays(weekStart, weeksToShow * 7);
 
-      // Get all months that fall within this range
       let currentMonth = startOfMonth(startDate);
       const lastMonth = endOfMonth(endDate);
 
       while (currentMonth <= lastMonth) {
         const monthKey = getMonthKey(currentMonth);
 
-        // If we haven't fetched this month yet, add it to the fetch list
         if (!fetchedMonths.current.has(monthKey)) {
           monthsToFetch.push(new Date(currentMonth));
         }
 
-        // Move to next month
         currentMonth = addDays(endOfMonth(currentMonth), 1);
       }
 
-      // Fetch all required months
       for (const month of monthsToFetch) {
         await fetchMonthAvailabilities(month);
       }
     },
-    [selectedTreatments, loadingAvailabilities, fetchMonthAvailabilities]
+    [selectedServices, loadingAvailabilities, fetchMonthAvailabilities]
   );
 
-  // Update week availability from API data
   const updateWeekAvailabilityFromApi = useCallback(
-    (currentEndOfWeek: Date, _selectedDay: Date | null) => {
+    (currentEndOfWeek: Date) => {
       if (!availabilities || !availabilities.dates) {
         return;
       }
@@ -162,11 +146,16 @@ export function useAvailability(
           const hasAvailability = availabilities.dates[dateKey];
           let totalSlots = 0;
 
-          if (hasAvailability && hasAvailability.staff) {
-            totalSlots = Object.values(hasAvailability.staff).reduce(
-              (total: number, staffMember: any) => total + staffMember.slots.length,
-              0
-            );
+          if (hasAvailability) {
+            if (hasAvailability.slots && hasAvailability.slots.length > 0) {
+              totalSlots = hasAvailability.slots.length;
+            } else if (hasAvailability.staff) {
+              totalSlots = Object.values(hasAvailability.staff).reduce(
+                (total: number, staffMember) =>
+                  total + staffMember.slots.length,
+                0
+              );
+            }
           }
 
           return {
@@ -182,12 +171,11 @@ export function useAvailability(
     [availabilities]
   );
 
-  // Reset availability state
   const resetAvailability = () => {
     setAvailabilities(null);
     setWeekAvailability([]);
     setLoadingAvailabilities(false);
-    fetchedMonths.current.clear(); // Clear fetched months cache
+    fetchedMonths.current.clear();
   };
 
   return {
@@ -200,4 +188,3 @@ export function useAvailability(
     resetAvailability,
   };
 }
-
