@@ -146,7 +146,7 @@ export async function invokeAvailabilityList(
     staffIds?: string[];
   }
 ) {
-  return supabase.functions.invoke("availability-list", { body });
+  return supabase.functions.invoke("availability-list-v2", { body });
 }
 
 export async function invokeAppointmentCreate(
@@ -167,7 +167,7 @@ export async function invokeAppointmentCreate(
     referralCode?: string;
   }
 ) {
-  return supabase.functions.invoke("appointment-create", { body });
+  return supabase.functions.invoke("appointment-create-v2", { body });
 }
 
 export function eligibleStaffIdsForVariant(
