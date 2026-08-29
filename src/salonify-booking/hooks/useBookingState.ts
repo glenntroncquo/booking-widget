@@ -93,8 +93,11 @@ export function useBookingState(
         };
       })
     );
-    if (slot.staffId) {
-      setSelectedStaffId(slot.staffId);
+    const resolvedStaffId =
+      slot.staffId ||
+      slot.segments?.find((segment) => Boolean(segment.staffId))?.staffId;
+    if (resolvedStaffId) {
+      setSelectedStaffId(resolvedStaffId);
     }
   };
 

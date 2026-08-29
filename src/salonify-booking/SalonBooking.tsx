@@ -290,7 +290,7 @@ export function SalonBooking({
             return {
               time: startTime,
               selected: false,
-              staffId: slot.staff_id,
+              staffId: slot.staff_id || staffId,
               startTime: slot.start_time,
               endTime: slot.end_time,
               availableStart: slot.available_start,
@@ -625,23 +625,34 @@ export function SalonBooking({
         return;
       }
 
+      const slotStaffId =
+        bookingState.selectedSlotData?.staffId ||
+        bookingState.selectedStaffId ||
+        "";
+
       const servicesPayload = bookingState.selectedServices.map(
         (item, index) => {
-          const staffId =
-            item.staffId ||
+          const segmentStaffId =
             bookingState.selectedSlotData?.segments?.[index]?.staffId ||
-            bookingState.selectedSlotData?.staffId ||
-            "";
+            bookingState.selectedSlotData?.segments?.find(
+              (segment) =>
+                segment.serviceId === item.service.id &&
+                segment.serviceVariantId === item.variant.id
+            )?.staffId;
           return {
             serviceId: item.service.id,
             serviceVariantId: item.variant.id,
-            staffId,
+            staffId: segmentStaffId || item.staffId || slotStaffId,
           };
         }
       );
 
-      if (servicesPayload.some((item) => !item.staffId)) {
-        toast.error("Kies voor elke dienst een medewerker.");
+      const staffId = slotStaffId || servicesPayload[0]?.staffId || "";
+
+      if (!staffId || servicesPayload.some((item) => !item.staffId)) {
+        toast.error(
+          "Er is een probleem met de geselecteerde datum, medewerker of tijd."
+        );
         return;
       }
 
@@ -692,6 +703,7 @@ export function SalonBooking({
         start: startTimeUTC.toISOString(),
         end: endTimeUTC.toISOString(),
         companyId,
+        staffId,
         services: servicesPayload,
         price: totalPrice,
         duration: totalDuration,

@@ -155,6 +155,7 @@ export async function invokeAppointmentCreate(
     start: string;
     end?: string;
     companyId: string;
+    staffId: string;
     services: AppointmentServiceItem[];
     price: number;
     duration?: number;

@@ -71,15 +71,25 @@ function slotImagePath(slot: ApiTimeSlot): string | null {
   return slot.image_path ?? slot.image_url ?? null;
 }
 
-function toSlotSegments(slot: ApiTimeSlot): SlotSegment[] | undefined {
+function toSlotSegments(
+  slot: ApiTimeSlot,
+  fallbackStaffId: string
+): SlotSegment[] | undefined {
   if (!slot.segments || slot.segments.length === 0) return undefined;
   return slot.segments.map((segment) => ({
     serviceId: segment.service_id,
     serviceVariantId: segment.service_variant_id,
-    staffId: segment.staff_id,
+    staffId: segment.staff_id || fallbackStaffId,
     startsAt: segment.starts_at,
     endsAt: segment.ends_at,
   }));
+}
+
+function resolveSlotStaffId(
+  slot: ApiTimeSlot,
+  groupStaffId?: string
+): string {
+  return slot.staff_id || groupStaffId || "";
 }
 
 function flattenDaySlots(day: ApiDayAvailability): ApiTimeSlot[] {
@@ -166,7 +176,12 @@ export function DateTimeSelection({
 
   const clientVisitMinutes = calculateTotalDuration(selectedServices);
 
-  const renderSlotButton = (slot: ApiTimeSlot, key: string) => {
+  const renderSlotButton = (
+    slot: ApiTimeSlot,
+    key: string,
+    groupStaffId?: string
+  ) => {
+    const staffId = resolveSlotStaffId(slot, groupStaffId);
     const startTime = formatTimeDisplay(slot.start_time);
     const clientEndTime =
       clientVisitMinutes > 0
@@ -174,7 +189,7 @@ export function DateTimeSelection({
         : formatTimeDisplay(slot.end_time);
     const isSelected =
       selectedTimeSlot === startTime &&
-      (!selectedStaffId || selectedStaffId === slot.staff_id);
+      (!selectedStaffId || selectedStaffId === staffId);
 
     return (
       <Button
@@ -185,16 +200,16 @@ export function DateTimeSelection({
           isSelected ? "bg-salon-primary text-white" : "bg-white"
         )}
         onClick={() => {
-          if (slot.staff_id) onStaffSelect(slot.staff_id);
+          if (staffId) onStaffSelect(staffId);
           onTimeSlotSelect(startTime, {
             time: startTime,
             selected: true,
-            staffId: slot.staff_id,
+            staffId,
             startTime: slot.start_time,
             endTime: clientEndTime,
             availableStart: slot.available_start,
             availableEnd: slot.available_end,
-            segments: toSlotSegments(slot),
+            segments: toSlotSegments(slot, staffId),
           });
         }}
       >
@@ -430,7 +445,8 @@ export function DateTimeSelection({
                                       slotImagePath(slot) ??
                                       staffMember.image_path,
                                   },
-                                  `${staffId}-${index}`
+                                  `${staffId}-${index}`,
+                                  staffId
                                 )
                               )}
                             </div>
