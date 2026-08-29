@@ -20,6 +20,7 @@ import {
   calculateTotalPrice,
   calculateTotalDuration,
   isValidPhone,
+  toIsoInstant,
 } from "./utils";
 import { useMediaQuery } from "./components/use-mobile";
 
@@ -618,7 +619,11 @@ export function SalonBooking({
 
     try {
       bookingState.setSubmitting(true);
-      if (!bookingState.selectedDay || !bookingState.selectedTimeSlot) {
+      if (
+        !bookingState.selectedDay ||
+        !bookingState.selectedTimeSlot ||
+        !bookingState.selectedSlotData
+      ) {
         toast.error(
           "Er is een probleem met de geselecteerde datum, medewerker of tijd."
         );
@@ -660,37 +665,22 @@ export function SalonBooking({
       const totalDuration = calculateTotalDuration(
         bookingState.selectedServices
       );
-      const appointmentDate = bookingState.selectedDay;
-      const timeString = bookingState.selectedTimeSlot;
+      const start = toIsoInstant(bookingState.selectedSlotData.availableStart);
+      const slotEnd = toIsoInstant(bookingState.selectedSlotData.availableEnd);
+      const end =
+        slotEnd ??
+        (start
+          ? new Date(
+              Date.parse(start) + totalDuration * 60 * 1000
+            ).toISOString()
+          : null);
 
-      let hours = 0;
-      let minutes = 0;
-
-      if (timeString.includes("AM") || timeString.includes("PM")) {
-        const [timePart, period] = timeString.split(" ");
-        const [h, m] = timePart.split(":").map(Number);
-        hours =
-          period === "PM" && h !== 12
-            ? h + 12
-            : period === "AM" && h === 12
-              ? 0
-              : h;
-        minutes = m;
-      } else {
-        const [h, m] = timeString.split(":").map(Number);
-        hours = h;
-        minutes = m;
+      if (!start || !end) {
+        toast.error(
+          "Er is een probleem met de geselecteerde datum, medewerker of tijd."
+        );
+        return;
       }
-
-      const startTime = new Date(appointmentDate);
-      startTime.setHours(hours);
-      startTime.setMinutes(minutes);
-
-      const tzOffset = startTime.getTimezoneOffset();
-      const startTimeUTC = new Date(startTime.getTime() - tzOffset * 60 * 1000);
-      const endTimeUTC = new Date(
-        startTimeUTC.getTime() + totalDuration * 60 * 1000
-      );
 
       const totalPrice = bookingState.selectedServices.reduce(
         (sum, item) => sum + item.variant.price,
@@ -700,8 +690,8 @@ export function SalonBooking({
       const referralCodeTrimmed = bookingState.referralCode.trim();
 
       const response = await invokeAppointmentCreate(supabase, {
-        start: startTimeUTC.toISOString(),
-        end: endTimeUTC.toISOString(),
+        start,
+        end,
         companyId,
         staffId,
         services: servicesPayload,

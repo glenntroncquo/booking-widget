@@ -155,6 +155,14 @@ export function addMinutesToClockTime(
     .padStart(2, "0")}`;
 }
 
+/** Normalize a slot ISO instant. Rejects clock labels like "09:30". */
+export function toIsoInstant(value: string | undefined | null): string | null {
+  if (!value || !value.includes("T")) return null;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  return new Date(parsed).toISOString();
+}
+
 export const calculateTotalDuration = (selectedServices: SelectedService[]) => {
   return selectedServices.reduce(
     (total, item) => total + clientDurationMinutes(item),
