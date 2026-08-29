@@ -1,12 +1,10 @@
 import { useState, useRef } from "react";
 import { endOfWeek } from "date-fns";
 import { SelectedService, Service, ServiceVariant, TimeSlot } from "../types";
-import { allServicesHaveStaff } from "../utils";
 
 export function useBookingState(
   maxDate: Date,
-  initialStaffIds: string[] = [],
-  shouldShowStaff = true
+  initialStaffIds: string[] = []
 ) {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>(
@@ -49,12 +47,6 @@ export function useBookingState(
     setSelectedStaffIds(staffIds);
   };
 
-  const defaultStaffIdForNewService = (): string | null => {
-    if (!shouldShowStaff) return null;
-    if (selectedStaffIds.length === 1) return selectedStaffIds[0];
-    return null;
-  };
-
   const handleServiceVariantSelect = (
     service: Service,
     variant: ServiceVariant
@@ -74,7 +66,7 @@ export function useBookingState(
         {
           service,
           variant,
-          staffId: defaultStaffIdForNewService(),
+          staffId: null,
         },
       ]);
     }
@@ -84,12 +76,6 @@ export function useBookingState(
     const updatedSelections = [...selectedServices];
     updatedSelections.splice(index, 1);
     setSelectedServices(updatedSelections);
-  };
-
-  const setServiceStaff = (index: number, staffId: string | null) => {
-    setSelectedServices((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, staffId } : item))
-    );
   };
 
   const applyStaffFromSlot = (slot: TimeSlot) => {
@@ -112,13 +98,9 @@ export function useBookingState(
     }
   };
 
-  const canProceedFromStep1 =
-    selectedServices.length > 0 &&
-    (!shouldShowStaff || allServicesHaveStaff(selectedServices));
+  const canProceedFromStep1 = selectedServices.length > 0;
 
-  const canProceedFromStep2 =
-    Boolean(selectedDay && selectedTimeSlot) &&
-    (!shouldShowStaff || allServicesHaveStaff(selectedServices));
+  const canProceedFromStep2 = Boolean(selectedDay && selectedTimeSlot);
 
   const handleNextStep = () => {
     if (currentStep === 1 && canProceedFromStep1) {
@@ -247,7 +229,6 @@ export function useBookingState(
     handleStaffSelectionChange,
     handleServiceVariantSelect,
     removeService,
-    setServiceStaff,
     applyStaffFromSlot,
     handleNextStep,
     handlePreviousStep,

@@ -31,6 +31,7 @@ import {
   TimeSlot,
   SalonTheme,
   ApiDayAvailability,
+  ApiStaffMember,
   ApiTimeSlot,
   SlotSegment,
 } from "./types/types";
@@ -52,7 +53,6 @@ interface DateTimeSelectionProps {
   theme: SalonTheme;
   supabase: SupabaseClient;
   shouldShowStaff: boolean;
-  staffAlreadyChosen: boolean;
   onPreviousWeek: () => void;
   onNextWeek: () => void;
   onDaySelect: (day: DayAvailability) => void;
@@ -98,6 +98,33 @@ function flattenDaySlots(day: ApiDayAvailability): ApiTimeSlot[] {
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
 }
 
+function groupSlotsByStaff(
+  day: ApiDayAvailability
+): Array<[string, ApiStaffMember]> {
+  if (day.staff && Object.keys(day.staff).length > 0) {
+    return Object.entries(day.staff);
+  }
+  if (!day.slots || day.slots.length === 0) return [];
+
+  const grouped = new Map<string, ApiStaffMember>();
+  for (const slot of day.slots) {
+    const staffId = slot.staff_id;
+    if (!staffId) continue;
+    const existing = grouped.get(staffId);
+    if (existing) {
+      existing.slots.push(slot);
+    } else {
+      grouped.set(staffId, {
+        first_name: slot.first_name,
+        last_name: slot.last_name,
+        image_path: slotImagePath(slot),
+        slots: [slot],
+      });
+    }
+  }
+  return Array.from(grouped.entries());
+}
+
 export function DateTimeSelection({
   selectedServices,
   availabilities,
@@ -113,7 +140,6 @@ export function DateTimeSelection({
   theme,
   supabase,
   shouldShowStaff,
-  staffAlreadyChosen,
   onPreviousWeek,
   onNextWeek,
   onDaySelect,
@@ -148,7 +174,7 @@ export function DateTimeSelection({
         : formatTimeDisplay(slot.end_time);
     const isSelected =
       selectedTimeSlot === startTime &&
-      (!selectedStaffId || selectedStaffId === slot.staff_id || staffAlreadyChosen);
+      (!selectedStaffId || selectedStaffId === slot.staff_id);
 
     return (
       <Button
@@ -178,11 +204,10 @@ export function DateTimeSelection({
     );
   };
 
-  const showStaffAccordion =
-    shouldShowStaff &&
-    !staffAlreadyChosen &&
-    selectedDayAvailability?.staff &&
-    Object.keys(selectedDayAvailability.staff).length > 0;
+  const staffGroups = selectedDayAvailability
+    ? groupSlotsByStaff(selectedDayAvailability)
+    : [];
+  const showStaffAccordion = shouldShowStaff && staffGroups.length > 0;
 
   return (
     <div>
@@ -358,7 +383,7 @@ export function DateTimeSelection({
                 <div className="mb-6">
                   {showStaffAccordion ? (
                     <Accordion type="single" collapsible className="w-full">
-                      {Object.entries(selectedDayAvailability.staff ?? {}).map(
+                      {staffGroups.map(
                         ([staffId, staffMember]) => (
                         <AccordionItem key={staffId} value={staffId}>
                           <AccordionTrigger className="text-left py-3">

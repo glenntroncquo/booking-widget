@@ -162,13 +162,6 @@ export const calculateTotalDuration = (selectedServices: SelectedService[]) => {
   );
 };
 
-export const allServicesHaveStaff = (selectedServices: SelectedService[]) => {
-  return (
-    selectedServices.length > 0 &&
-    selectedServices.every((item) => Boolean(item.staffId))
-  );
-};
-
 export const uniqueStaffIds = (selectedServices: SelectedService[]) => {
   return Array.from(
     new Set(

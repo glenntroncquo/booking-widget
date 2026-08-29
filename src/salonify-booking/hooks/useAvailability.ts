@@ -49,7 +49,6 @@ export function useAvailability(
         const services = selectedServices.map((item) => ({
           serviceId: item.service.id,
           serviceVariantId: item.variant.id,
-          ...(item.staffId ? { staffId: item.staffId } : {}),
         }));
 
         const { data, error } = await invokeAvailabilityList(supabase, {

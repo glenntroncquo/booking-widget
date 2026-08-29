@@ -15,7 +15,6 @@ import { createClient } from "@supabase/supabase-js";
 
 import {
   cn,
-  allServicesHaveStaff,
   uniqueStaffIds,
   daySlotCount,
   calculateTotalPrice,
@@ -75,7 +74,7 @@ export function SalonBooking({
 
   const isMobile = useMediaQuery("(max-width: 448px)");
 
-  const bookingState = useBookingState(maxDate, initialStaffIds, shouldShowStaff);
+  const bookingState = useBookingState(maxDate, initialStaffIds);
   const availability = useAvailability(
     supabase,
     companyId,
@@ -96,9 +95,6 @@ export function SalonBooking({
   const [emailSubmitting, setEmailSubmitting] = useState(false);
   const [emailSuccess, setEmailSuccess] = useState(false);
   const [emailError, setEmailError] = useState("");
-
-  const staffAlreadyChosen =
-    shouldShowStaff && allServicesHaveStaff(bookingState.selectedServices);
 
   const handleCloseEmailInput = () => {
     setEmailInputClosing(true);
@@ -345,7 +341,6 @@ export function SalonBooking({
     bookingState.selectedServices.map((item) => ({
       serviceId: item.service.id,
       variantId: item.variant.id,
-      staffId: item.staffId,
     }))
   );
 
@@ -369,8 +364,7 @@ export function SalonBooking({
 
     if (
       bookingState.currentStep === 2 &&
-      bookingState.selectedServices.length > 0 &&
-      (!shouldShowStaff || staffAlreadyChosen)
+      bookingState.selectedServices.length > 0
     ) {
       availability.fetchRequiredMonths(bookingState.currentEndOfWeek, 2);
     }
@@ -380,8 +374,7 @@ export function SalonBooking({
   useEffect(() => {
     if (
       bookingState.currentStep === 2 &&
-      bookingState.selectedServices.length > 0 &&
-      (!shouldShowStaff || staffAlreadyChosen)
+      bookingState.selectedServices.length > 0
     ) {
       availability.fetchRequiredMonths(bookingState.currentEndOfWeek, 2);
     }
@@ -390,8 +383,6 @@ export function SalonBooking({
     bookingState.currentEndOfWeek,
     bookingState.selectedServices,
     availability,
-    shouldShowStaff,
-    staffAlreadyChosen,
   ]);
 
   const handlePreviousWeek = () => {
@@ -424,9 +415,7 @@ export function SalonBooking({
   const handleDaySelect = (day: DayAvailability) => {
     bookingState.isManuallySelecting.current = true;
     bookingState.setSelectedDay(day.date);
-    if (!staffAlreadyChosen) {
-      bookingState.setSelectedStaffId(null);
-    }
+    bookingState.setSelectedStaffId(null);
     bookingState.resetTimeSlotSelection();
 
     setTimeout(() => {
@@ -466,9 +455,7 @@ export function SalonBooking({
         bookingState.setCurrentEndOfWeek(selectedWeekEnd);
       }
 
-      if (!staffAlreadyChosen) {
-        bookingState.setSelectedStaffId(null);
-      }
+      bookingState.setSelectedStaffId(null);
       bookingState.resetTimeSlotSelection();
       bookingState.setCalendarOpen(false);
 
@@ -972,14 +959,11 @@ export function SalonBooking({
               <ServiceSelection
                 services={services}
                 selectedServices={bookingState.selectedServices}
-                staff={staffList.staff}
-                shouldShowStaff={shouldShowStaff}
                 loading={loading}
                 theme={theme}
                 supabase={supabase}
                 onServiceSelect={bookingState.handleServiceVariantSelect}
                 onRemoveService={bookingState.removeService}
-                onServiceStaffChange={bookingState.setServiceStaff}
               />
             )}
 
@@ -1000,7 +984,6 @@ export function SalonBooking({
                 theme={theme}
                 supabase={supabase}
                 shouldShowStaff={shouldShowStaff}
-                staffAlreadyChosen={staffAlreadyChosen}
                 onPreviousWeek={handlePreviousWeek}
                 onNextWeek={handleNextWeek}
                 onDaySelect={handleDaySelect}
@@ -1008,9 +991,7 @@ export function SalonBooking({
                 onTimeSlotSelect={(timeSlot: string, slotData: TimeSlot) => {
                   bookingState.setSelectedTimeSlot(timeSlot);
                   bookingState.setSelectedSlotData(slotData);
-                  if (!staffAlreadyChosen) {
-                    bookingState.applyStaffFromSlot(slotData);
-                  }
+                  bookingState.applyStaffFromSlot(slotData);
                 }}
                 onCalendarOpenChange={bookingState.setCalendarOpen}
                 onCalendarSelect={handleCalendarSelect}
@@ -1063,18 +1044,7 @@ export function SalonBooking({
           selectedServices={bookingState.selectedServices}
           submitting={bookingState.submitting}
           onPreviousStep={bookingState.handlePreviousStep}
-          onNextStep={() => {
-            if (
-              bookingState.currentStep === 1 &&
-              bookingState.selectedServices.length > 0 &&
-              shouldShowStaff &&
-              !allServicesHaveStaff(bookingState.selectedServices)
-            ) {
-              toast.error("Kies voor elke dienst een medewerker.");
-              return;
-            }
-            bookingState.handleNextStep();
-          }}
+          onNextStep={bookingState.handleNextStep}
           onSubmit={handleSubmit}
           onShowEmailInput={() => setShowEmailInput(true)}
         />

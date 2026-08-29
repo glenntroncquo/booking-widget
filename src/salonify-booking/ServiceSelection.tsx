@@ -12,43 +12,28 @@ import {
   ServiceVariant,
   SelectedService,
   SalonTheme,
-  StaffOption,
 } from "./types/types";
 import { SupabaseClient } from "@supabase/supabase-js";
-import { eligibleStaffIdsForVariant } from "./api";
 
 interface ServiceSelectionProps {
   services: Service[];
   selectedServices: SelectedService[];
-  staff: StaffOption[];
-  shouldShowStaff: boolean;
   loading: boolean;
   theme: SalonTheme;
   supabase: SupabaseClient;
   onServiceSelect: (service: Service, variant: ServiceVariant) => void;
   onRemoveService: (index: number) => void;
-  onServiceStaffChange: (index: number, staffId: string | null) => void;
 }
 
 export function ServiceSelection({
   services,
   selectedServices,
-  staff,
-  shouldShowStaff,
   loading,
   theme,
   supabase,
   onServiceSelect,
   onRemoveService,
-  onServiceStaffChange,
 }: ServiceSelectionProps) {
-  const staffChoicesFor = (item: SelectedService) => {
-    const eligibleIds = eligibleStaffIdsForVariant(item.service, item.variant);
-    if (!eligibleIds) return staff;
-    const eligible = new Set(eligibleIds);
-    return staff.filter((member) => eligible.has(member.id));
-  };
-
   return (
     <div>
       <h3 className="text-lg font-medium mb-2">Selecteer uw behandelingen</h3>
@@ -58,50 +43,24 @@ export function ServiceSelection({
           Geselecteerde behandelingen:
         </p>
         <div className="flex flex-col gap-2 min-h-[26px]">
-          {selectedServices.map((item, index) => {
-            const choices = staffChoicesFor(item);
-            return (
-              <div
-                key={`${item.service.id}-${item.variant.id}-${index}`}
-                className="flex flex-col gap-1"
+          {selectedServices.map((item, index) => (
+            <Badge
+              key={`${item.service.id}-${item.variant.id}-${index}`}
+              variant="secondary"
+              className="flex items-center gap-1 bg-salon-primary text-salon-button rounded-full w-fit"
+            >
+              <span>
+                {item.service.name}: {item.variant.name}
+              </span>
+              <button
+                onClick={() => onRemoveService(index)}
+                className="ml-1 rounded-full hover:bg-salon-primary hover:text-white p-0.5"
               >
-                <Badge
-                  variant="secondary"
-                  className="flex items-center gap-1 bg-salon-primary text-salon-button rounded-full w-fit"
-                >
-                  <span>
-                    {item.service.name}: {item.variant.name}
-                  </span>
-                  <button
-                    onClick={() => onRemoveService(index)}
-                    className="ml-1 rounded-full hover:bg-salon-primary hover:text-white p-0.5"
-                  >
-                    <X className="h-3 w-3" />
-                    <span className="sr-only">Verwijderen</span>
-                  </button>
-                </Badge>
-                {shouldShowStaff && (
-                  <label className="flex items-center gap-2 text-sm text-gray-600 pl-1">
-                    <span className="shrink-0">Medewerker</span>
-                    <select
-                      value={item.staffId ?? ""}
-                      onChange={(e) =>
-                        onServiceStaffChange(index, e.target.value || null)
-                      }
-                      className="flex-1 min-w-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-800"
-                    >
-                      <option value="">Kies medewerker</option>
-                      {choices.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.first_name} {member.last_name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-              </div>
-            );
-          })}
+                <X className="h-3 w-3" />
+                <span className="sr-only">Verwijderen</span>
+              </button>
+            </Badge>
+          ))}
         </div>
       </div>
 
@@ -139,9 +98,6 @@ export function ServiceSelection({
                           item.variant.id === variant.id
                       );
                       const duration = variantClientDurationMinutes(variant);
-                      const hasFreePhase = variant.phases?.some(
-                        (phase) => phase.phase_type === "free"
-                      );
 
                       return (
                         <div
@@ -180,7 +136,6 @@ export function ServiceSelection({
                               <div className="text-sm text-gray-500">
                                 <Clock className="inline-block h-3 w-3 mr-1" />
                                 {duration} min
-                                {hasFreePhase ? " (incl. inwerktijd)" : ""}
                               </div>
                             </div>
                           </div>
