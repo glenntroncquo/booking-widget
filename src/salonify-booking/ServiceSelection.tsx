@@ -6,7 +6,7 @@ import {
   AccordionTrigger,
 } from "./components/accordion";
 import { Badge } from "./components/badge";
-import { cn, getImageUrl } from "./utils";
+import { cn, getImageUrl, variantClientDurationMinutes } from "./utils";
 import {
   Service,
   ServiceVariant,
@@ -138,13 +138,7 @@ export function ServiceSelection({
                           item.service.id === service.id &&
                           item.variant.id === variant.id
                       );
-                      const duration =
-                        variant.phases && variant.phases.length > 0
-                          ? variant.phases.reduce(
-                              (sum, phase) => sum + phase.duration_minutes,
-                              0
-                            )
-                          : variant.client_duration_minutes;
+                      const duration = variantClientDurationMinutes(variant);
                       const hasFreePhase = variant.phases?.some(
                         (phase) => phase.phase_type === "free"
                       );

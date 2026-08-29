@@ -17,7 +17,13 @@ import {
   AccordionTrigger,
 } from "./components/accordion";
 import { useMediaQuery } from "./components/use-mobile";
-import { cn, calculateTotalDuration, getImageUrl, formatTimeDisplay } from "./utils";
+import {
+  cn,
+  addMinutesToClockTime,
+  calculateTotalDuration,
+  getImageUrl,
+  formatTimeDisplay,
+} from "./utils";
 import {
   SelectedService,
   DayAvailability,
@@ -132,8 +138,14 @@ export function DateTimeSelection({
       ? availabilities.dates[selectedDayKey]
       : undefined;
 
+  const clientVisitMinutes = calculateTotalDuration(selectedServices);
+
   const renderSlotButton = (slot: ApiTimeSlot, key: string) => {
     const startTime = formatTimeDisplay(slot.start_time);
+    const clientEndTime =
+      clientVisitMinutes > 0
+        ? addMinutesToClockTime(startTime, clientVisitMinutes)
+        : formatTimeDisplay(slot.end_time);
     const isSelected =
       selectedTimeSlot === startTime &&
       (!selectedStaffId || selectedStaffId === slot.staff_id || staffAlreadyChosen);
@@ -153,7 +165,7 @@ export function DateTimeSelection({
             selected: true,
             staffId: slot.staff_id,
             startTime: slot.start_time,
-            endTime: slot.end_time,
+            endTime: clientEndTime,
             availableStart: slot.available_start,
             availableEnd: slot.available_end,
             segments: toSlotSegments(slot),
@@ -161,9 +173,7 @@ export function DateTimeSelection({
         }}
       >
         <span>{startTime}</span>
-        <span className="text-xs opacity-75">
-          {formatTimeDisplay(slot.end_time)}
-        </span>
+        <span className="text-xs opacity-75">{clientEndTime}</span>
       </Button>
     );
   };

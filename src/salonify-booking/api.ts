@@ -58,7 +58,13 @@ function normalizePhase(raw: unknown): ServiceVariantPhase | null {
   const row = asRecord(raw);
   if (!row) return null;
   const phaseType = asString(row.phase_type);
-  if (phaseType !== "busy" && phaseType !== "free") return null;
+  if (
+    phaseType !== "busy" &&
+    phaseType !== "free" &&
+    phaseType !== "buffer"
+  ) {
+    return null;
+  }
   return {
     sequence: asNumber(row.sequence),
     phase_type: phaseType as PhaseType,

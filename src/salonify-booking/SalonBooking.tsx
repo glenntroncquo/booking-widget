@@ -658,6 +658,7 @@ export function SalonBooking({
         return;
       }
 
+      // Client visit length (busy + free). Buffer is staff lock only.
       const totalDuration = calculateTotalDuration(
         bookingState.selectedServices
       );

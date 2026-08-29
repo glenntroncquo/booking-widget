@@ -1,5 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { SelectedService } from "./types/types";
+import { PhaseType, SelectedService, ServiceVariant } from "./types/types";
 
 type ClassValue =
   | string
@@ -116,18 +116,44 @@ export const calculateTotalPriceRange = (
   };
 };
 
-export const clientDurationMinutes = (item: SelectedService): number => {
-  if (
-    item.variant.phases &&
-    item.variant.phases.length > 0
-  ) {
-    return item.variant.phases.reduce(
+/** Client visit length: busy + free only. Buffer is staff lock, never advertised. */
+export function isClientFacingPhase(phase: {
+  phase_type: PhaseType;
+}): boolean {
+  return phase.phase_type === "busy" || phase.phase_type === "free";
+}
+
+export function variantClientDurationMinutes(variant: ServiceVariant): number {
+  const clientPhases = variant.phases?.filter(isClientFacingPhase) ?? [];
+  if (clientPhases.length > 0) {
+    return clientPhases.reduce(
       (total, phase) => total + phase.duration_minutes,
       0
     );
   }
-  return item.variant.client_duration_minutes;
+  return variant.client_duration_minutes;
+}
+
+export const clientDurationMinutes = (item: SelectedService): number => {
+  return variantClientDurationMinutes(item.variant);
 };
+
+export function addMinutesToClockTime(
+  time: string,
+  minutesToAdd: number
+): string {
+  const display = formatTimeDisplay(time);
+  const [hours, minutes] = display.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return time;
+  const total =
+    (((hours * 60 + minutes + minutesToAdd) % (24 * 60)) + 24 * 60) %
+    (24 * 60);
+  const nextHours = Math.floor(total / 60);
+  const nextMinutes = total % 60;
+  return `${nextHours.toString().padStart(2, "0")}:${nextMinutes
+    .toString()
+    .padStart(2, "0")}`;
+}
 
 export const calculateTotalDuration = (selectedServices: SelectedService[]) => {
   return selectedServices.reduce(

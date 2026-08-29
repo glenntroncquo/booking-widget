@@ -89,7 +89,7 @@ export type Availabilities = {
   };
 };
 
-export type PhaseType = "busy" | "free";
+export type PhaseType = "busy" | "free" | "buffer";
 
 export interface ServiceVariantPhase {
   sequence: number;
