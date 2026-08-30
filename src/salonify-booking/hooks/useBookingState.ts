@@ -1,16 +1,17 @@
 import { useState, useRef } from "react";
 import { endOfWeek } from "date-fns";
-import { SelectedTreatment, Treatment } from "../types";
+import { SelectedService, Service, ServiceVariant, TimeSlot } from "../types";
 
-export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
-  // Core booking state
+export function useBookingState(
+  maxDate: Date,
+  initialStaffIds: string[] = []
+) {
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedTreatments, setSelectedTreatments] = useState<
-    SelectedTreatment[]
-  >([]);
+  const [selectedServices, setSelectedServices] = useState<SelectedService[]>(
+    []
+  );
   const [submitting, setSubmitting] = useState(false);
 
-  // Customer details
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -21,7 +22,6 @@ export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
   const [imageData, setImageData] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
 
-  // Availability state
   const [currentEndOfWeek, setCurrentEndOfWeek] = useState(
     endOfWeek(new Date(), { weekStartsOn: 1 })
   );
@@ -30,59 +30,85 @@ export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
   const [selectedStaffIds, setSelectedStaffIds] =
     useState<string[]>(initialStaffIds);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
-  const [timeSlots, setTimeSlots] = useState<any[]>([]);
-  const [selectedSlotData, setSelectedSlotData] = useState<any>(null);
+  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
+  const [selectedSlotData, setSelectedSlotData] = useState<TimeSlot | null>(
+    null
+  );
 
-  // Calendar state
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
-  // Refs for tracking user actions
   const hasAutoSelectedToday = useRef(false);
   const isManuallySelecting = useRef(false);
-  // Becomes true the first time the user changes the staff selection. Once set,
-  // URL-param-derived defaults (ids/slugs) must never re-apply over the choice.
   const hasUserChangedStaff = useRef(false);
 
-  // Wraps staff selection changes coming from user interaction so that any
-  // URL-seeded defaults stop being re-applied afterwards.
   const handleStaffSelectionChange = (staffIds: string[]) => {
     hasUserChangedStaff.current = true;
     setSelectedStaffIds(staffIds);
   };
 
-  // Treatment selection handlers
-  const handleTreatmentOptionSelect = (treatment: Treatment, option: any) => {
-    const existingIndex = selectedTreatments.findIndex(
+  const handleServiceVariantSelect = (
+    service: Service,
+    variant: ServiceVariant
+  ) => {
+    const existingIndex = selectedServices.findIndex(
       (item) =>
-        item.treatment.id === treatment.id && item.option.id === option.id
+        item.service.id === service.id && item.variant.id === variant.id
     );
 
     if (existingIndex >= 0) {
-      const updatedSelections = [...selectedTreatments];
+      const updatedSelections = [...selectedServices];
       updatedSelections.splice(existingIndex, 1);
-      setSelectedTreatments(updatedSelections);
+      setSelectedServices(updatedSelections);
     } else {
-      setSelectedTreatments([...selectedTreatments, { treatment, option }]);
+      setSelectedServices([
+        ...selectedServices,
+        {
+          service,
+          variant,
+          staffId: null,
+        },
+      ]);
     }
   };
 
-  const removeTreatment = (index: number) => {
-    const updatedSelections = [...selectedTreatments];
+  const removeService = (index: number) => {
+    const updatedSelections = [...selectedServices];
     updatedSelections.splice(index, 1);
-    setSelectedTreatments(updatedSelections);
+    setSelectedServices(updatedSelections);
   };
 
-  // Step navigation
+  const applyStaffFromSlot = (slot: TimeSlot) => {
+    setSelectedServices((prev) =>
+      prev.map((item, index) => {
+        const segmentStaffId =
+          slot.segments?.find(
+            (segment) =>
+              segment.serviceId === item.service.id &&
+              segment.serviceVariantId === item.variant.id
+          )?.staffId ?? slot.segments?.[index]?.staffId;
+        return {
+          ...item,
+          staffId: segmentStaffId || slot.staffId || item.staffId,
+        };
+      })
+    );
+    const resolvedStaffId =
+      slot.staffId ||
+      slot.segments?.find((segment) => Boolean(segment.staffId))?.staffId;
+    if (resolvedStaffId) {
+      setSelectedStaffId(resolvedStaffId);
+    }
+  };
+
+  const canProceedFromStep1 = selectedServices.length > 0;
+
+  const canProceedFromStep2 = Boolean(selectedDay && selectedTimeSlot);
+
   const handleNextStep = () => {
-    if (currentStep === 1 && selectedTreatments.length > 0) {
+    if (currentStep === 1 && canProceedFromStep1) {
       setCurrentStep(2);
-    } else if (
-      currentStep === 2 &&
-      selectedDay &&
-      selectedStaffId &&
-      selectedTimeSlot
-    ) {
+    } else if (currentStep === 2 && canProceedFromStep2) {
       setCurrentStep(3);
       setTimeout(() => {
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -108,29 +134,21 @@ export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
       return;
     }
 
-    if (step === 2 && selectedTreatments.length > 0) {
+    if (step === 2 && canProceedFromStep1) {
       setCurrentStep(2);
       return;
     }
 
-    if (
-      step === 3 &&
-      selectedTreatments.length > 0 &&
-      selectedDay &&
-      selectedStaffId &&
-      selectedTimeSlot
-    ) {
+    if (step === 3 && canProceedFromStep1 && canProceedFromStep2) {
       setCurrentStep(3);
       setTimeout(() => {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }, 50);
-      return;
     }
   };
 
-  // Reset function
   const resetToStep1 = () => {
-    setSelectedTreatments([]);
+    setSelectedServices([]);
     setSelectedDay(null);
     setSelectedStaffId(null);
     setSelectedStaffIds(initialStaffIds);
@@ -150,7 +168,6 @@ export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
     isManuallySelecting.current = false;
   };
 
-  // Time slot management
   const resetTimeSlotSelection = () => {
     const updatedTimeSlots = timeSlots.map((slot) => ({
       ...slot,
@@ -164,9 +181,8 @@ export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
   void maxDate;
 
   return {
-    // State
     currentStep,
-    selectedTreatments,
+    selectedServices,
     submitting,
     firstName,
     lastName,
@@ -189,8 +205,9 @@ export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
     hasAutoSelectedToday,
     isManuallySelecting,
     hasUserChangedStaff,
+    canProceedFromStep1,
+    canProceedFromStep2,
 
-    // Setters
     setCurrentStep,
     setSubmitting,
     setFirstName,
@@ -212,10 +229,10 @@ export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
     setCalendarOpen,
     setCalendarMonth,
 
-    // Handlers
     handleStaffSelectionChange,
-    handleTreatmentOptionSelect,
-    removeTreatment,
+    handleServiceVariantSelect,
+    removeService,
+    applyStaffFromSlot,
     handleNextStep,
     handlePreviousStep,
     handleStepClick,
@@ -223,4 +240,3 @@ export function useBookingState(maxDate: Date, initialStaffIds: string[] = []) {
     resetTimeSlotSelection,
   };
 }
-

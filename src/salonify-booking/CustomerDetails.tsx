@@ -6,15 +6,21 @@ import { Label } from "./components/label";
 import { Input } from "./components/input";
 import { Textarea } from "./components/textarea";
 import { cn, calculateTotalPriceRange, getImageUrl } from "./utils";
-import { SelectedTreatment, Availabilities, SalonTheme } from "./types/types";
+import {
+  SelectedService,
+  Availabilities,
+  SalonTheme,
+  StaffOption,
+} from "./types/types";
 import { SupabaseClient } from "@supabase/supabase-js";
 
 interface CustomerDetailsProps {
-  selectedTreatments: SelectedTreatment[];
+  selectedServices: SelectedService[];
   selectedDay: Date | null;
   selectedTimeSlot: string | null;
   selectedStaffId: string | null;
   availabilities: Availabilities | null;
+  staff: StaffOption[];
   firstName: string;
   lastName: string;
   email: string;
@@ -35,12 +41,40 @@ interface CustomerDetailsProps {
   onRemoveImage: () => void;
 }
 
+function staffLabel(
+  staffId: string | null,
+  staff: StaffOption[],
+  availabilities: Availabilities | null,
+  selectedDay: Date | null
+): { name: string; imagePath: string | null } | null {
+  if (!staffId) return null;
+  const fromList = staff.find((member) => member.id === staffId);
+  if (fromList) {
+    return {
+      name: `${fromList.first_name} ${fromList.last_name}`,
+      imagePath: fromList.image_path,
+    };
+  }
+  if (availabilities && selectedDay) {
+    const dateKey = format(selectedDay, "yyyy-MM-dd");
+    const staffMember = availabilities.dates[dateKey]?.staff?.[staffId];
+    if (staffMember) {
+      return {
+        name: `${staffMember.first_name} ${staffMember.last_name}`,
+        imagePath: staffMember.image_path,
+      };
+    }
+  }
+  return null;
+}
+
 export function CustomerDetails({
-  selectedTreatments,
+  selectedServices,
   selectedDay,
   selectedTimeSlot,
   selectedStaffId,
   availabilities,
+  staff,
   firstName,
   lastName,
   email,
@@ -60,6 +94,20 @@ export function CustomerDetails({
   onImageUpload,
   onRemoveImage,
 }: CustomerDetailsProps) {
+  const uniqueStaff = Array.from(
+    new Set(
+      selectedServices
+        .map((item) => item.staffId)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  const headerStaffIds =
+    uniqueStaff.length > 0
+      ? uniqueStaff
+      : selectedStaffId
+        ? [selectedStaffId]
+        : [];
+
   return (
     <div>
       <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6 shadow-sm">
@@ -70,68 +118,78 @@ export function CustomerDetails({
               : ""}{" "}
             om {selectedTimeSlot}
           </div>
-          <div className="flex items-center gap-2">
-            {selectedStaffId && availabilities && selectedDay && (
-              <>
-                {(() => {
-                  const dateKey = format(selectedDay, "yyyy-MM-dd");
-                  const dayAvailability = availabilities.dates[dateKey];
-                  const staffMember = dayAvailability?.staff[selectedStaffId];
-                  return staffMember ? (
-                    <>
-                      {staffMember.image_path && (
-                        <img
-                          src={
-                            getImageUrl(
-                              staffMember.image_path,
-                              supabase,
-                              "company",
-                            ) || undefined
-                          }
-                          alt={`${staffMember.first_name} ${staffMember.last_name}`}
-                          className="w-6 h-6 rounded-full object-cover"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = "none";
-                          }}
-                        />
-                      )}
-                      <span className="text-sm text-gray-600">
-                        {staffMember.first_name} {staffMember.last_name}
-                      </span>
-                    </>
-                  ) : null;
-                })()}
-              </>
-            )}
+          <div className="flex flex-col gap-1">
+            {headerStaffIds.map((staffId) => {
+              const info = staffLabel(
+                staffId,
+                staff,
+                availabilities,
+                selectedDay
+              );
+              if (!info) return null;
+              return (
+                <div key={staffId} className="flex items-center gap-2">
+                  {info.imagePath && (
+                    <img
+                      src={
+                        getImageUrl(info.imagePath, supabase, "company") ||
+                        undefined
+                      }
+                      alt={info.name}
+                      className="w-6 h-6 rounded-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = "none";
+                      }}
+                    />
+                  )}
+                  <span className="text-sm text-gray-600">{info.name}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
         <div className="space-y-2 mb-3">
-          {selectedTreatments.map((item, index) => (
-            <div key={index} className="flex justify-between items-center">
-              <span className="text-sm text-gray-700">
-                {item.treatment.name} - {item.option.name}
-              </span>
-              <span className="text-sm text-gray-700">
-                {item.option.price < 0 ? (
-                  ""
-                ) : (
-                  <>
-                    €{" "}
-                    {item.option.max_price &&
-                    item.option.max_price !== item.option.price
-                      ? `${item.option.price.toFixed(2).replace(".", ",")} - ${
-                          item.option.max_price >= 9999
-                            ? "..."
-                            : item.option.max_price.toFixed(2).replace(".", ",")
-                        }`
-                      : item.option.price.toFixed(2).replace(".", ",")}
-                  </>
-                )}
-              </span>
-            </div>
-          ))}
+          {selectedServices.map((item, index) => {
+            const assigned = staffLabel(
+              item.staffId,
+              staff,
+              availabilities,
+              selectedDay
+            );
+            return (
+              <div key={index} className="flex justify-between items-start gap-2">
+                <div className="min-w-0">
+                  <span className="text-sm text-gray-700">
+                    {item.service.name} - {item.variant.name}
+                  </span>
+                  {assigned && uniqueStaff.length > 1 && (
+                    <div className="text-xs text-gray-500">{assigned.name}</div>
+                  )}
+                </div>
+                <span className="text-sm text-gray-700 shrink-0">
+                  {item.variant.price < 0 ? (
+                    ""
+                  ) : (
+                    <>
+                      €{" "}
+                      {item.variant.max_price &&
+                      item.variant.max_price !== item.variant.price
+                        ? `${item.variant.price.toFixed(2).replace(".", ",")} - ${
+                            item.variant.max_price >= 9999
+                              ? "..."
+                              : item.variant.max_price
+                                  .toFixed(2)
+                                  .replace(".", ",")
+                          }`
+                        : item.variant.price.toFixed(2).replace(".", ",")}
+                    </>
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         <div className="border-t border-gray-200 pt-3">
@@ -139,7 +197,7 @@ export function CustomerDetails({
             <span className="font-semibold text-gray-700">Totaal</span>
             <span className="font-semibold text-gray-700">
               {(() => {
-                const priceRange = calculateTotalPriceRange(selectedTreatments);
+                const priceRange = calculateTotalPriceRange(selectedServices);
                 if (priceRange.baseTotal < 0) {
                   return "";
                 }
@@ -274,7 +332,7 @@ export function CustomerDetails({
                 htmlFor="image-upload"
                 className={cn(
                   "cursor-pointer flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-4 w-full",
-                  imageUploading && "opacity-50 cursor-not-allowed",
+                  imageUploading && "opacity-50 cursor-not-allowed"
                 )}
               >
                 <div className="text-center">

@@ -1,10 +1,12 @@
 import { Button } from "./components/button";
 import { calculateTotalPriceRange } from "./utils";
 
+import { SelectedService } from "./types/types";
+
 interface BookingFooterProps {
   isMobile: boolean;
   currentStep: number;
-  selectedTreatments: any[];
+  selectedServices: SelectedService[];
   submitting: boolean;
   onPreviousStep: () => void;
   onNextStep: () => void;
@@ -15,14 +17,14 @@ interface BookingFooterProps {
 export function BookingFooter({
   isMobile,
   currentStep,
-  selectedTreatments,
+  selectedServices,
   submitting,
   onPreviousStep,
   onNextStep,
   onSubmit,
   onShowEmailInput,
 }: BookingFooterProps) {
-  const priceRange = calculateTotalPriceRange(selectedTreatments);
+  const priceRange = calculateTotalPriceRange(selectedServices);
   const totalDisplay =
     priceRange.baseTotal < 0
       ? ""
@@ -32,7 +34,7 @@ export function BookingFooter({
           ? `${priceRange.baseTotal} - ${priceRange.maxTotal}`
           : priceRange.baseTotal;
 
-  const hasNoTreatments = selectedTreatments.length === 0;
+  const hasNoTreatments = selectedServices.length === 0;
 
   if (isMobile) {
     return (

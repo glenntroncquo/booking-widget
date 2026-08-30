@@ -6,29 +6,34 @@ import {
   AccordionTrigger,
 } from "./components/accordion";
 import { Badge } from "./components/badge";
-import { cn, getImageUrl } from "./utils";
-import { Treatment, SelectedTreatment, SalonTheme } from "./types/types";
+import { cn, getImageUrl, variantClientDurationMinutes } from "./utils";
+import {
+  Service,
+  ServiceVariant,
+  SelectedService,
+  SalonTheme,
+} from "./types/types";
 import { SupabaseClient } from "@supabase/supabase-js";
 
-interface TreatmentSelectionProps {
-  treatments: Treatment[];
-  selectedTreatments: SelectedTreatment[];
+interface ServiceSelectionProps {
+  services: Service[];
+  selectedServices: SelectedService[];
   loading: boolean;
   theme: SalonTheme;
   supabase: SupabaseClient;
-  onTreatmentSelect: (treatment: Treatment, option: any) => void;
-  onRemoveTreatment: (index: number) => void;
+  onServiceSelect: (service: Service, variant: ServiceVariant) => void;
+  onRemoveService: (index: number) => void;
 }
 
-export function TreatmentSelection({
-  treatments,
-  selectedTreatments,
+export function ServiceSelection({
+  services,
+  selectedServices,
   loading,
   theme,
   supabase,
-  onTreatmentSelect,
-  onRemoveTreatment,
-}: TreatmentSelectionProps) {
+  onServiceSelect,
+  onRemoveService,
+}: ServiceSelectionProps) {
   return (
     <div>
       <h3 className="text-lg font-medium mb-2">Selecteer uw behandelingen</h3>
@@ -37,18 +42,18 @@ export function TreatmentSelection({
         <p className="text-gray-500 text-sm mb-4">
           Geselecteerde behandelingen:
         </p>
-        <div className="flex flex-wrap gap-2 min-h-[26px]">
-          {selectedTreatments.map((item, index) => (
+        <div className="flex flex-col gap-2 min-h-[26px]">
+          {selectedServices.map((item, index) => (
             <Badge
-              key={`${item.treatment.id}-${item.option.id}`}
+              key={`${item.service.id}-${item.variant.id}-${index}`}
               variant="secondary"
-              className="flex items-center gap-1 bg-salon-primary text-salon-button rounded-full"
+              className="flex items-center gap-1 bg-salon-primary text-salon-button rounded-full w-fit"
             >
               <span>
-                {item.treatment.name}: {item.option.name}
+                {item.service.name}: {item.variant.name}
               </span>
               <button
-                onClick={() => onRemoveTreatment(index)}
+                onClick={() => onRemoveService(index)}
                 className="ml-1 rounded-full hover:bg-salon-primary hover:text-white p-0.5"
               >
                 <X className="h-3 w-3" />
@@ -70,78 +75,83 @@ export function TreatmentSelection({
               <p className="text-gray-500 text-sm">Behandelingen laden...</p>
             </div>
           </div>
-        ) : treatments.length > 0 ? (
-          treatments.map((treatment) => (
-            <AccordionItem key={treatment.id} value={treatment.id}>
+        ) : services.length > 0 ? (
+          services.map((service) => (
+            <AccordionItem key={service.id} value={service.id}>
               <AccordionTrigger className="text-left py-3">
-                <div className="font-medium">{treatment.name}</div>
+                <div className="font-medium">{service.name}</div>
               </AccordionTrigger>
               <AccordionContent>
                 <div className="text-sm text-gray-500 mb-3">
-                  {treatment.description}
+                  {service.description}
                 </div>
                 <div className="space-y-3">
-                  {treatment.price_option
-                    .sort((a, b) => (a.order || 0) - (b.order || 0))
-                    .map((option) => {
-                      const isSelected = selectedTreatments.some(
+                  {service.service_variant
+                    .sort(
+                      (a, b) =>
+                        (a.display_order || 0) - (b.display_order || 0)
+                    )
+                    .map((variant) => {
+                      const isSelected = selectedServices.some(
                         (item) =>
-                          item.treatment.id === treatment.id &&
-                          item.option.id === option.id,
+                          item.service.id === service.id &&
+                          item.variant.id === variant.id
                       );
+                      const duration = variantClientDurationMinutes(variant);
 
                       return (
                         <div
-                          key={option.id}
+                          key={variant.id}
                           className={cn(
                             "flex items-center justify-between p-3 border rounded-lg cursor-pointer",
                             isSelected
                               ? "border-salon-primary bg-salon-primary-light"
-                              : "border-gray-200 hover:border-salon-primary",
+                              : "border-gray-200 hover:border-salon-primary"
                           )}
-                          onClick={() => onTreatmentSelect(treatment, option)}
+                          onClick={() => onServiceSelect(service, variant)}
                         >
                           <div className="flex items-center gap-3">
-                            {option.image_path && (
+                            {variant.image_path && (
                               <div className="flex-shrink-0">
                                 <img
                                   src={
                                     getImageUrl(
-                                      option.image_path,
+                                      variant.image_path,
                                       supabase,
-                                      "company",
+                                      "company"
                                     ) || undefined
                                   }
-                                  alt={option.name}
+                                  alt={variant.name}
                                   className="w-12 h-12 rounded-lg object-cover"
                                   onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
+                                    const target =
+                                      e.target as HTMLImageElement;
                                     target.style.display = "none";
                                   }}
                                 />
                               </div>
                             )}
                             <div>
-                              <div className="font-medium">{option.name}</div>
+                              <div className="font-medium">{variant.name}</div>
                               <div className="text-sm text-gray-500">
                                 <Clock className="inline-block h-3 w-3 mr-1" />
-                                {option.duration_in_minutes} min
+                                {duration} min
                               </div>
                             </div>
                           </div>
                           <div className="font-bold">
-                            {option.price < 0 ? (
+                            {variant.price < 0 ? (
                               <span></span>
-                            ) : option.max_price &&
-                              option.max_price !== option.price ? (
+                            ) : variant.max_price &&
+                              variant.max_price !== variant.price ? (
                               <span>
-                                €{option.price} -{" "}
-                                {option.max_price >= 9999
+                                €{variant.price} -{" "}
+                                {variant.max_price >= 9999
                                   ? "..."
-                                  : `€${option.max_price}`}
+                                  : `€${variant.max_price}`}
                               </span>
                             ) : (
-                              <span>€{option.price}</span>
+                              <span>€{variant.price}</span>
                             )}
                           </div>
                         </div>
@@ -153,7 +163,7 @@ export function TreatmentSelection({
           ))
         ) : (
           <div className="py-4 text-center text-gray-500">
-            No treatments available
+            Geen diensten beschikbaar
           </div>
         )}
       </Accordion>

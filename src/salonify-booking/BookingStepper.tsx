@@ -1,26 +1,27 @@
 import { ReactNode } from "react";
 import { Check } from "lucide-react";
 import { cn } from "./utils";
+import { SelectedService } from "./types/types";
 
 interface BookingStepperProps {
   currentStep: number;
-  selectedTreatments: any[];
-  selectedDay: Date | null;
-  selectedStaffId: string | null;
-  selectedTimeSlot: string | null;
+  selectedServices: SelectedService[];
+  canOpenStep2: boolean;
+  canOpenStep3: boolean;
   onStepClick: (step: number) => void;
   headerRight?: ReactNode;
 }
 
 export function BookingStepper({
   currentStep,
-  selectedTreatments,
-  selectedDay,
-  selectedStaffId,
-  selectedTimeSlot,
+  selectedServices,
+  canOpenStep2,
+  canOpenStep3,
   onStepClick,
   headerRight,
 }: BookingStepperProps) {
+  void selectedServices;
+
   return (
     <div className="px-4 pt-6 pb-4 border-b">
       <div className="relative mb-4">
@@ -69,9 +70,7 @@ export function BookingStepper({
         <div
           className={cn(
             "flex flex-col items-center",
-            selectedTreatments.length > 0
-              ? "cursor-pointer"
-              : "cursor-not-allowed opacity-50"
+            canOpenStep2 ? "cursor-pointer" : "cursor-not-allowed opacity-50"
           )}
           onClick={() => onStepClick(2)}
         >
@@ -79,7 +78,7 @@ export function BookingStepper({
             className={cn(
               "flex items-center justify-center w-8 h-8 rounded-full mb-1 transition-colors",
               currentStep >= 2 ? "bg-salon-primary text-white" : "bg-gray-200",
-              selectedTreatments.length > 0 && "hover:opacity-80"
+              canOpenStep2 && "hover:opacity-80"
             )}
           >
             {currentStep > 2 ? <Check className="h-5 w-5" /> : "2"}
@@ -109,12 +108,7 @@ export function BookingStepper({
         <div
           className={cn(
             "flex flex-col items-center",
-            selectedTreatments.length > 0 &&
-              selectedDay &&
-              selectedStaffId &&
-              selectedTimeSlot
-              ? "cursor-pointer"
-              : "cursor-not-allowed opacity-50"
+            canOpenStep3 ? "cursor-pointer" : "cursor-not-allowed opacity-50"
           )}
           onClick={() => onStepClick(3)}
         >
@@ -122,11 +116,7 @@ export function BookingStepper({
             className={cn(
               "flex items-center justify-center w-8 h-8 rounded-full mb-1 transition-colors",
               currentStep >= 3 ? "bg-salon-primary text-white" : "bg-gray-200",
-              selectedTreatments.length > 0 &&
-                selectedDay &&
-                selectedStaffId &&
-                selectedTimeSlot &&
-                "hover:opacity-80"
+              canOpenStep3 && "hover:opacity-80"
             )}
           >
             3
@@ -146,4 +136,3 @@ export function BookingStepper({
     </div>
   );
 }
-

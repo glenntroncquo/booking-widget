@@ -31,6 +31,15 @@ export interface TimeSlot {
   endTime?: string;
   availableStart?: string;
   availableEnd?: string;
+  segments?: SlotSegment[];
+}
+
+export interface SlotSegment {
+  serviceId: string;
+  serviceVariantId: string;
+  staffId: string;
+  startsAt?: string;
+  endsAt?: string;
 }
 
 export interface DayAvailability {
@@ -43,11 +52,19 @@ export type ApiTimeSlot = {
   staff_id: string;
   first_name: string;
   last_name: string;
-  image_url: string | null;
+  image_url?: string | null;
+  image_path?: string | null;
   start_time: string;
   end_time: string;
   available_start: string;
   available_end: string;
+  segments?: Array<{
+    service_id: string;
+    service_variant_id: string;
+    staff_id: string;
+    starts_at?: string;
+    ends_at?: string;
+  }>;
 };
 
 export type ApiStaffMember = {
@@ -59,9 +76,11 @@ export type ApiStaffMember = {
 
 export type ApiDayAvailability = {
   dayName: string;
-  staff: {
+  staff?: {
     [staffId: string]: ApiStaffMember;
   };
+  /** Appointment-level slots when staff is already chosen per service. */
+  slots?: ApiTimeSlot[];
 };
 
 export type Availabilities = {
@@ -70,26 +89,43 @@ export type Availabilities = {
   };
 };
 
-export interface PriceOption {
+export type PhaseType = "busy" | "free" | "buffer";
+
+export interface ServiceVariantPhase {
+  sequence: number;
+  phase_type: PhaseType;
+  duration_minutes: number;
+  label?: string | null;
+}
+
+export interface ServiceVariant {
   id: string;
   name: string;
   price: number;
   max_price?: number | null;
-  duration_in_minutes: number;
+  client_duration_minutes: number;
+  staff_duration_minutes?: number | null;
   image_path?: string | null;
-  order?: number;
+  display_order?: number;
+  phases?: ServiceVariantPhase[];
+  /** Variant-level staff eligibility override (from staff_service_variant). */
+  staff_ids?: string[];
 }
 
-export interface Treatment {
+export interface Service {
   id: string;
   name: string;
   description: string;
-  price_option: PriceOption[];
+  display_order?: number | null;
+  service_variant: ServiceVariant[];
+  /** Service-level staff eligibility (from staff_service). */
+  staff_ids?: string[];
 }
 
-export interface SelectedTreatment {
-  treatment: Treatment;
-  option: PriceOption;
+export interface SelectedService {
+  service: Service;
+  variant: ServiceVariant;
+  staffId: string | null;
 }
 
 export interface StaffOption {
@@ -104,7 +140,7 @@ export interface BookingData {
   date: Date;
   timeSlot: string;
   staffName: string;
-  treatments: SelectedTreatment[];
+  services: SelectedService[];
   totalPrice: number;
   referralApplied?: boolean;
 }
@@ -118,4 +154,3 @@ export const defaultTheme: SalonTheme = {
   background: "#FEFEFE",
   buttonText: "red",
 };
-

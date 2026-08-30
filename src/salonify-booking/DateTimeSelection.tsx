@@ -17,18 +17,28 @@ import {
   AccordionTrigger,
 } from "./components/accordion";
 import { useMediaQuery } from "./components/use-mobile";
-import { cn, calculateTotalDuration, getImageUrl, formatTimeDisplay } from "./utils";
 import {
-  SelectedTreatment,
+  cn,
+  addMinutesToClockTime,
+  calculateTotalDuration,
+  getImageUrl,
+  formatTimeDisplay,
+} from "./utils";
+import {
+  SelectedService,
   DayAvailability,
   Availabilities,
   TimeSlot,
   SalonTheme,
+  ApiDayAvailability,
+  ApiStaffMember,
+  ApiTimeSlot,
+  SlotSegment,
 } from "./types/types";
 import { SupabaseClient } from "@supabase/supabase-js";
 
 interface DateTimeSelectionProps {
-  selectedTreatments: SelectedTreatment[];
+  selectedServices: SelectedService[];
   availabilities: Availabilities | null;
   loadingAvailabilities: boolean;
   weekAvailability: DayAvailability[];
@@ -57,8 +67,76 @@ interface DateTimeSelectionProps {
   isNextWeekDisabled: () => boolean;
 }
 
+function slotImagePath(slot: ApiTimeSlot): string | null {
+  return slot.image_path ?? slot.image_url ?? null;
+}
+
+function toSlotSegments(
+  slot: ApiTimeSlot,
+  fallbackStaffId: string
+): SlotSegment[] | undefined {
+  if (!slot.segments || slot.segments.length === 0) return undefined;
+  return slot.segments.map((segment) => ({
+    serviceId: segment.service_id,
+    serviceVariantId: segment.service_variant_id,
+    staffId: segment.staff_id || fallbackStaffId,
+    startsAt: segment.starts_at,
+    endsAt: segment.ends_at,
+  }));
+}
+
+function resolveSlotStaffId(
+  slot: ApiTimeSlot,
+  groupStaffId?: string
+): string {
+  return slot.staff_id || groupStaffId || "";
+}
+
+function flattenDaySlots(day: ApiDayAvailability): ApiTimeSlot[] {
+  if (day.slots && day.slots.length > 0) return day.slots;
+  if (!day.staff) return [];
+  return Object.entries(day.staff)
+    .flatMap(([staffId, staffMember]) =>
+      staffMember.slots.map((slot) => ({
+        ...slot,
+        staff_id: slot.staff_id || staffId,
+        first_name: slot.first_name || staffMember.first_name,
+        last_name: slot.last_name || staffMember.last_name,
+        image_path: slotImagePath(slot) ?? staffMember.image_path,
+      }))
+    )
+    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+}
+
+function groupSlotsByStaff(
+  day: ApiDayAvailability
+): Array<[string, ApiStaffMember]> {
+  if (day.staff && Object.keys(day.staff).length > 0) {
+    return Object.entries(day.staff);
+  }
+  if (!day.slots || day.slots.length === 0) return [];
+
+  const grouped = new Map<string, ApiStaffMember>();
+  for (const slot of day.slots) {
+    const staffId = slot.staff_id;
+    if (!staffId) continue;
+    const existing = grouped.get(staffId);
+    if (existing) {
+      existing.slots.push(slot);
+    } else {
+      grouped.set(staffId, {
+        first_name: slot.first_name,
+        last_name: slot.last_name,
+        image_path: slotImagePath(slot),
+        slots: [slot],
+      });
+    }
+  }
+  return Array.from(grouped.entries());
+}
+
 export function DateTimeSelection({
-  selectedTreatments,
+  selectedServices,
   availabilities,
   loadingAvailabilities,
   weekAvailability,
@@ -88,13 +166,71 @@ export function DateTimeSelection({
   const isMobile = useMediaQuery("(max-width: 448px)");
   void theme;
 
+  const selectedDayKey = selectedDay
+    ? format(selectedDay, "yyyy-MM-dd")
+    : null;
+  const selectedDayAvailability =
+    selectedDayKey && availabilities
+      ? availabilities.dates[selectedDayKey]
+      : undefined;
+
+  const clientVisitMinutes = calculateTotalDuration(selectedServices);
+
+  const renderSlotButton = (
+    slot: ApiTimeSlot,
+    key: string,
+    groupStaffId?: string
+  ) => {
+    const staffId = resolveSlotStaffId(slot, groupStaffId);
+    const startTime = formatTimeDisplay(slot.start_time);
+    const clientEndTime =
+      clientVisitMinutes > 0
+        ? addMinutesToClockTime(startTime, clientVisitMinutes)
+        : formatTimeDisplay(slot.end_time);
+    const isSelected =
+      selectedTimeSlot === startTime &&
+      (!selectedStaffId || selectedStaffId === staffId);
+
+    return (
+      <Button
+        key={key}
+        variant={isSelected ? "default" : "outline"}
+        className={cn(
+          "h-auto py-2 text-sm flex flex-col items-center",
+          isSelected ? "bg-salon-primary text-white" : "bg-white"
+        )}
+        onClick={() => {
+          if (staffId) onStaffSelect(staffId);
+          onTimeSlotSelect(startTime, {
+            time: startTime,
+            selected: true,
+            staffId,
+            startTime: slot.start_time,
+            endTime: clientEndTime,
+            availableStart: slot.available_start,
+            availableEnd: slot.available_end,
+            segments: toSlotSegments(slot, staffId),
+          });
+        }}
+      >
+        <span>{startTime}</span>
+        <span className="text-xs opacity-75">{clientEndTime}</span>
+      </Button>
+    );
+  };
+
+  const staffGroups = selectedDayAvailability
+    ? groupSlotsByStaff(selectedDayAvailability)
+    : [];
+  const showStaffAccordion = shouldShowStaff && staffGroups.length > 0;
+
   return (
     <div>
       <h3 className="text-lg font-medium mb-2">Selecteer datum & tijd</h3>
       <p className="text-gray-500 text-sm mb-4">
-        {selectedTreatments.length} dienst
-        {selectedTreatments.length !== 1 ? "en" : ""} geselecteerd (
-        {calculateTotalDuration(selectedTreatments)} min totaal)
+        {selectedServices.length} dienst
+        {selectedServices.length !== 1 ? "en" : ""} geselecteerd (
+        {calculateTotalDuration(selectedServices)} min totaal)
       </p>
 
       <div className="mb-6">
@@ -258,16 +394,12 @@ export function DateTimeSelection({
               })}
             </div>
 
-            {selectedDay &&
-              availabilities &&
-              availabilities.dates[format(selectedDay, "yyyy-MM-dd")] && (
+            {selectedDay && selectedDayAvailability && (
                 <div className="mb-6">
-                  {shouldShowStaff ? (
+                  {showStaffAccordion ? (
                     <Accordion type="single" collapsible className="w-full">
-                      {Object.entries(
-                        availabilities.dates[format(selectedDay, "yyyy-MM-dd")]
-                          .staff
-                      ).map(([staffId, staffMember]) => (
+                      {staffGroups.map(
+                        ([staffId, staffMember]) => (
                         <AccordionItem key={staffId} value={staffId}>
                           <AccordionTrigger className="text-left py-3">
                             <div className="flex items-center gap-3">
@@ -300,42 +432,23 @@ export function DateTimeSelection({
                           </AccordionTrigger>
                           <AccordionContent>
                             <div className="grid grid-cols-3 gap-2 pt-2">
-                              {staffMember.slots.map((slot, index) => {
-                                const startTime = formatTimeDisplay(slot.start_time);
-                                const isSelected =
-                                  selectedStaffId === staffId &&
-                                  selectedTimeSlot === startTime;
-
-                                return (
-                                  <Button
-                                    key={index}
-                                    variant={isSelected ? "default" : "outline"}
-                                    className={cn(
-                                      "h-auto py-2 text-sm flex flex-col items-center",
-                                      isSelected
-                                        ? "bg-salon-primary text-white"
-                                        : "bg-white"
-                                    )}
-                                    onClick={() => {
-                                      onStaffSelect(staffId);
-                                      onTimeSlotSelect(startTime, {
-                                        time: startTime,
-                                        selected: true,
-                                        staffId: slot.staff_id,
-                                        startTime: slot.start_time,
-                                        endTime: slot.end_time,
-                                        availableStart: slot.available_start,
-                                        availableEnd: slot.available_end,
-                                      });
-                                    }}
-                                  >
-                                    <span>{startTime}</span>
-                                    <span className="text-xs opacity-75">
-                                      {formatTimeDisplay(slot.end_time)}
-                                    </span>
-                                  </Button>
-                                );
-                              })}
+                              {staffMember.slots.map((slot, index) =>
+                                renderSlotButton(
+                                  {
+                                    ...slot,
+                                    staff_id: slot.staff_id || staffId,
+                                    first_name:
+                                      slot.first_name || staffMember.first_name,
+                                    last_name:
+                                      slot.last_name || staffMember.last_name,
+                                    image_path:
+                                      slotImagePath(slot) ??
+                                      staffMember.image_path,
+                                  },
+                                  `${staffId}-${index}`,
+                                  staffId
+                                )
+                              )}
                             </div>
                           </AccordionContent>
                         </AccordionItem>
@@ -345,52 +458,13 @@ export function DateTimeSelection({
                     <div>
                       <h4 className="font-medium mb-3">Beschikbare tijden</h4>
                       <div className="grid grid-cols-3 gap-2">
-                        {Object.entries(
-                          availabilities.dates[format(selectedDay, "yyyy-MM-dd")]
-                            .staff
-                        )
-                          .flatMap(([staffId, staffMember]) =>
-                            staffMember.slots.map((slot) => ({
-                              ...slot,
-                              staffId,
-                              displayStartTime: formatTimeDisplay(slot.start_time),
-                              displayEndTime: formatTimeDisplay(slot.end_time),
-                            }))
-                          )
-                          .sort((a, b) => a.start_time.localeCompare(b.start_time))
-                          .map((slot, index) => {
-                            const isSelected =
-                              selectedStaffId === slot.staffId &&
-                              selectedTimeSlot === slot.displayStartTime;
-
-                            return (
-                              <Button
-                                key={`${slot.staffId}-${index}`}
-                                variant={isSelected ? "default" : "outline"}
-                                className={cn(
-                                  "h-auto py-2 text-sm flex flex-col items-center",
-                                  isSelected ? "bg-salon-primary text-white" : "bg-white"
-                                )}
-                                onClick={() => {
-                                  onStaffSelect(slot.staffId);
-                                  onTimeSlotSelect(slot.displayStartTime, {
-                                    time: slot.displayStartTime,
-                                    selected: true,
-                                    staffId: slot.staff_id,
-                                    startTime: slot.start_time,
-                                    endTime: slot.end_time,
-                                    availableStart: slot.available_start,
-                                    availableEnd: slot.available_end,
-                                  });
-                                }}
-                              >
-                                <span>{slot.displayStartTime}</span>
-                                <span className="text-xs opacity-75">
-                                  {slot.displayEndTime}
-                                </span>
-                              </Button>
-                            );
-                          })}
+                        {flattenDaySlots(selectedDayAvailability).map(
+                          (slot, index) =>
+                            renderSlotButton(
+                              slot,
+                              `${slot.staff_id}-${slot.start_time}-${index}`
+                            )
+                        )}
                       </div>
                     </div>
                   )}
@@ -408,4 +482,3 @@ export function DateTimeSelection({
     </div>
   );
 }
-

@@ -13,23 +13,26 @@ import { toast, Toaster } from "sonner";
 import confetti from "canvas-confetti";
 import { createClient } from "@supabase/supabase-js";
 
-import { cn } from "./utils";
+import {
+  cn,
+  uniqueStaffIds,
+  daySlotCount,
+  calculateTotalPrice,
+  calculateTotalDuration,
+  isValidPhone,
+  toIsoInstant,
+} from "./utils";
 import { useMediaQuery } from "./components/use-mobile";
 
 import {
   SalonBookingProps,
   defaultTheme,
   DayAvailability,
-  Treatment,
+  Service,
   BookingData,
+  TimeSlot,
 } from "./types/types";
-import {
-  calculateTotalPrice,
-  calculateTotalDuration,
-  formatTimeDisplay,
-  isValidPhone,
-} from "./utils";
-import { TreatmentSelection } from "./TreatmentSelection";
+import { ServiceSelection } from "./ServiceSelection";
 import { DateTimeSelection } from "./DateTimeSelection";
 import { CustomerDetails } from "./CustomerDetails";
 import { BookingConfirmation } from "./BookingConfirmation";
@@ -42,6 +45,11 @@ import {
   useImageUpload,
   useStaff,
 } from "./hooks";
+import {
+  invokeAppointmentCreate,
+  invokeServiceList,
+  normalizeServiceList,
+} from "./api";
 
 export function SalonBooking({
   companyId,
@@ -52,7 +60,6 @@ export function SalonBooking({
   initialStaffIds = [],
   initialStaffSlugs = [],
 }: SalonBookingProps) {
-  // Create Supabase client from config
   const supabase = useMemo(() => {
     return createClient(supabaseConfig.url, supabaseConfig.anonKey);
   }, [supabaseConfig.url, supabaseConfig.anonKey]);
@@ -68,19 +75,17 @@ export function SalonBooking({
 
   const isMobile = useMediaQuery("(max-width: 448px)");
 
-  // Custom hooks for state management
   const bookingState = useBookingState(maxDate, initialStaffIds);
   const availability = useAvailability(
     supabase,
     companyId,
-    bookingState.selectedTreatments,
+    bookingState.selectedServices,
     bookingState.selectedStaffIds
   );
   const staffList = useStaff(supabase, companyId);
   const imageUpload = useImageUpload();
 
-  // Local state
-  const [treatments, setTreatments] = useState<Treatment[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmedBookingData, setConfirmedBookingData] =
@@ -92,7 +97,6 @@ export function SalonBooking({
   const [emailSuccess, setEmailSuccess] = useState(false);
   const [emailError, setEmailError] = useState("");
 
-  // Email close handler with animation
   const handleCloseEmailInput = () => {
     setEmailInputClosing(true);
     setTimeout(() => {
@@ -101,16 +105,14 @@ export function SalonBooking({
       setEmailSuccess(false);
       setEmailError("");
       setEmail("");
-    }, 300); // Match animation duration
+    }, 300);
   };
 
-  // Email validation
-  const isValidEmail = (email: string): boolean => {
+  const isValidEmail = (emailValue: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+    return emailRegex.test(emailValue);
   };
 
-  // Email submission handler
   const handleEmailSubmit = async () => {
     if (!email.trim()) {
       setEmailError("Vul een e-mailadres in");
@@ -136,9 +138,7 @@ export function SalonBooking({
         }
       );
 
-      // Check if we have data even without error
       if (response.data) {
-        // Handle the case where no appointments are found
         if (
           response.data.success === false &&
           response.data.message?.includes("No appointments found")
@@ -147,24 +147,20 @@ export function SalonBooking({
           return;
         }
 
-        // Handle other error cases from the function
         if (response.data.success === false) {
           setEmailError(response.data.error || "Er is een fout opgetreden.");
           return;
         }
       }
 
-      // Success!
       setEmailSuccess(true);
 
-      // Auto-close after 3 seconds
       setTimeout(() => {
         handleCloseEmailInput();
       }, 3000);
     } catch (error) {
       console.error("Error submitting email:e", error);
 
-      // More specific error messages
       const errorMessage =
         error instanceof Error ? error.message : "Onbekende fout";
 
@@ -184,43 +180,31 @@ export function SalonBooking({
     }
   };
 
-  // Fetch treatments, optionally filtered by the selected staff.
-  // The selected staff ids are the single source of truth for filtering. URL
-  // slugs only seed the initial selection (resolved to ids in the slug effect
-  // below); they must NOT be sent as a standalone filter, otherwise deselecting
-  // the pre-selected staff would still keep them applied at the API level.
   const staffFilterKey = JSON.stringify(bookingState.selectedStaffIds);
   const staffSlugKey = JSON.stringify(initialStaffSlugs);
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchTreatments() {
+    async function fetchServices() {
       setLoading(true);
       try {
         const staffIds: string[] = JSON.parse(staffFilterKey);
-        const { data, error } = await supabase.functions.invoke(
-          "treatment-list",
-          {
-            body: {
-              company_id: companyId,
-              ...(staffIds.length > 0 ? { staff_ids: staffIds } : {}),
-            },
-          }
-        );
+        const { data, error } = await invokeServiceList(supabase, {
+          company_id: companyId,
+          ...(staffIds.length > 0 ? { staff_ids: staffIds } : {}),
+        });
 
         if (cancelled) return;
 
         if (error) {
-          console.error("Error fetching treatments:", error);
+          console.error("Error fetching services:", error);
           return;
         }
 
-        if (Array.isArray(data)) {
-          setTreatments(data as Treatment[]);
-        }
+        setServices(normalizeServiceList(data));
       } catch (err) {
         if (!cancelled) {
-          console.error("Failed to fetch treatments:", err);
+          console.error("Failed to fetch services:", err);
         }
       } finally {
         if (!cancelled) {
@@ -229,22 +213,16 @@ export function SalonBooking({
       }
     }
 
-    fetchTreatments();
+    fetchServices();
 
     return () => {
       cancelled = true;
     };
   }, [supabase, companyId, staffFilterKey]);
 
-  // Pre-select staff from the URL slugs once the staff list (which now includes
-  // slugs) has loaded. This seeds the default selection exactly once and merges
-  // with any ids already seeded from the URL. It must never re-apply after the
-  // user has changed the staff selection, otherwise a deselected (pre-selected)
-  // staff member would reappear when the staff list finishes loading.
   const slugSelectionAppliedRef = useRef(false);
   useEffect(() => {
     if (slugSelectionAppliedRef.current) return;
-    // The user already interacted; URL defaults must not override their choice.
     if (bookingState.hasUserChangedStaff.current) {
       slugSelectionAppliedRef.current = true;
       return;
@@ -259,8 +237,6 @@ export function SalonBooking({
 
     slugSelectionAppliedRef.current = true;
     if (matchedIds.length > 0) {
-      // Merge with any ids already seeded from the URL so both param forms
-      // contribute to the initial default without duplicating entries.
       bookingState.setSelectedStaffIds((prev) =>
         Array.from(new Set([...prev, ...matchedIds]))
       );
@@ -268,7 +244,6 @@ export function SalonBooking({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [staffSlugKey, staffList.loading, staffList.staff]);
 
-  // Update time slots for a selected day and staff member
   const updateTimeSlotsForSelectedDay = useCallback(
     (day: Date, staffId?: string) => {
       if (!availability.availabilities) {
@@ -277,18 +252,46 @@ export function SalonBooking({
 
       const dateKey = format(day, "yyyy-MM-dd");
       const dayAvailability = availability.availabilities.dates[dateKey];
+      if (!dayAvailability) {
+        bookingState.setTimeSlots([]);
+        return;
+      }
 
-      if (dayAvailability && dayAvailability.staff && staffId) {
-        const staffMember = dayAvailability.staff[staffId];
-
-        if (staffMember && staffMember.slots && staffMember.slots.length > 0) {
-          const newTimeSlots = staffMember.slots.map((slot: any) => {
-            const startTime = formatTimeDisplay(slot.start_time);
-
+      if (dayAvailability.slots && dayAvailability.slots.length > 0) {
+        bookingState.setTimeSlots(
+          dayAvailability.slots.map((slot) => {
+            const startTime = slot.start_time;
             return {
               time: startTime,
               selected: false,
               staffId: slot.staff_id,
+              startTime: slot.start_time,
+              endTime: slot.end_time,
+              availableStart: slot.available_start,
+              availableEnd: slot.available_end,
+              segments: slot.segments?.map((segment) => ({
+                serviceId: segment.service_id,
+                serviceVariantId: segment.service_variant_id,
+                staffId: segment.staff_id,
+                startsAt: segment.starts_at,
+                endsAt: segment.ends_at,
+              })),
+            };
+          })
+        );
+        return;
+      }
+
+      if (dayAvailability.staff && staffId) {
+        const staffMember = dayAvailability.staff[staffId];
+
+        if (staffMember && staffMember.slots && staffMember.slots.length > 0) {
+          const newTimeSlots = staffMember.slots.map((slot) => {
+            const startTime = slot.start_time;
+            return {
+              time: startTime,
+              selected: false,
+              staffId: slot.staff_id || staffId,
               startTime: slot.start_time,
               endTime: slot.end_time,
               availableStart: slot.available_start,
@@ -307,41 +310,12 @@ export function SalonBooking({
     [availability.availabilities, bookingState.setTimeSlots]
   );
 
-  // Update week availability from API data
   const updateWeekAvailabilityFromApi = useCallback(() => {
     if (!availability.availabilities || !availability.availabilities.dates) {
       return;
     }
 
-    const weekStart = startOfWeek(bookingState.currentEndOfWeek, {
-      weekStartsOn: 1,
-    });
-
-    Array.from({ length: 7 }).map((_, index) => {
-      const day = addDays(weekStart, index);
-      const dateKey = format(day, "yyyy-MM-dd");
-
-      const hasAvailability = availability.availabilities!.dates[dateKey];
-      let totalSlots = 0;
-
-      if (hasAvailability && hasAvailability.staff) {
-        totalSlots = Object.values(hasAvailability.staff).reduce(
-          (total: number, staffMember: any) => total + staffMember.slots.length,
-          0
-        );
-      }
-
-      return {
-        date: day,
-        slots: totalSlots,
-        available: totalSlots > 0,
-      };
-    });
-
-    availability.updateWeekAvailabilityFromApi(
-      bookingState.currentEndOfWeek,
-      bookingState.selectedDay
-    );
+    availability.updateWeekAvailabilityFromApi(bookingState.currentEndOfWeek);
 
     if (bookingState.selectedDay) {
       updateTimeSlotsForSelectedDay(bookingState.selectedDay);
@@ -364,28 +338,23 @@ export function SalonBooking({
     updateWeekAvailabilityFromApi,
   ]);
 
-  // Reset availability when treatments change
-  useEffect(() => {
-    // Clear availability data when treatments change to force refetch
-    availability.resetAvailability();
+  const selectedServiceKey = JSON.stringify(
+    bookingState.selectedServices.map((item) => ({
+      serviceId: item.service.id,
+      variantId: item.variant.id,
+    }))
+  );
 
-    // Also clear day/time selection to force user to reselect
+  useEffect(() => {
+    availability.resetAvailability();
     bookingState.setSelectedDay(null);
     bookingState.setSelectedStaffId(null);
     bookingState.setSelectedTimeSlot(null);
     bookingState.setSelectedSlotData(null);
     bookingState.setTimeSlots([]);
-  }, [
-    bookingState.selectedTreatments.length,
-    JSON.stringify(
-      bookingState.selectedTreatments.map((t) => ({
-        treatmentId: t.treatment.id,
-        optionId: t.option.id,
-      }))
-    ),
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedServiceKey]);
 
-  // Reset availability when the staff filter changes so step 2 refetches
   useEffect(() => {
     availability.resetAvailability();
     bookingState.setSelectedDay(null);
@@ -396,7 +365,7 @@ export function SalonBooking({
 
     if (
       bookingState.currentStep === 2 &&
-      bookingState.selectedTreatments.length > 0
+      bookingState.selectedServices.length > 0
     ) {
       availability.fetchRequiredMonths(bookingState.currentEndOfWeek, 2);
     }
@@ -406,20 +375,17 @@ export function SalonBooking({
   useEffect(() => {
     if (
       bookingState.currentStep === 2 &&
-      bookingState.selectedTreatments.length > 0
+      bookingState.selectedServices.length > 0
     ) {
-      // Use smart month fetching - automatically detects and fetches required months
-      // This will fetch the current month and any new months that contain the weeks we're showing
       availability.fetchRequiredMonths(bookingState.currentEndOfWeek, 2);
     }
   }, [
     bookingState.currentStep,
     bookingState.currentEndOfWeek,
-    bookingState.selectedTreatments,
+    bookingState.selectedServices,
     availability,
   ]);
 
-  // Navigation handlers
   const handlePreviousWeek = () => {
     const currentWeekStart = addDays(bookingState.currentEndOfWeek, -7);
     const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
@@ -428,8 +394,7 @@ export function SalonBooking({
     const newWeekEnd = addDays(bookingState.currentEndOfWeek, -7);
     bookingState.setCurrentEndOfWeek(newWeekEnd);
 
-    // Check if we need to fetch new months for the previous week
-    if (bookingState.selectedTreatments.length > 0) {
+    if (bookingState.selectedServices.length > 0) {
       availability.fetchRequiredMonths(newWeekEnd, 2);
     }
   };
@@ -443,8 +408,7 @@ export function SalonBooking({
     const newWeekEnd = addDays(bookingState.currentEndOfWeek, 7);
     bookingState.setCurrentEndOfWeek(newWeekEnd);
 
-    // Check if we need to fetch new months for the next week
-    if (bookingState.selectedTreatments.length > 0) {
+    if (bookingState.selectedServices.length > 0) {
       availability.fetchRequiredMonths(newWeekEnd, 2);
     }
   };
@@ -487,7 +451,6 @@ export function SalonBooking({
       bookingState.isManuallySelecting.current = true;
       bookingState.setSelectedDay(date);
 
-      // Check if the selected date is in a different week and update week view accordingly
       const selectedWeekEnd = endOfWeek(date, { weekStartsOn: 1 });
       if (!isSameDay(selectedWeekEnd, bookingState.currentEndOfWeek)) {
         bookingState.setCurrentEndOfWeek(selectedWeekEnd);
@@ -510,16 +473,7 @@ export function SalonBooking({
       return false;
 
     const dateKey = format(date, "yyyy-MM-dd");
-    const dayAvailability = availability.availabilities.dates[dateKey];
-
-    if (!dayAvailability || !dayAvailability.staff) return false;
-
-    const totalSlots = Object.values(dayAvailability.staff).reduce(
-      (total: number, staffMember: any) => total + staffMember.slots.length,
-      0
-    );
-
-    return totalSlots > 0;
+    return daySlotCount(availability.availabilities.dates[dateKey]) > 0;
   };
 
   const isDateDisabled = (date: Date) => {
@@ -535,7 +489,6 @@ export function SalonBooking({
     return isBefore(dateOnly, today) || isAfter(dateOnly, maxDateOnly);
   };
 
-  // Form validation
   const validateForm = (): boolean => {
     if (!bookingState.firstName.trim()) {
       toast.error("Vul alstublieft uw voornaam in");
@@ -570,7 +523,6 @@ export function SalonBooking({
     return true;
   };
 
-  // Submit handler
   const handleSubmit = async () => {
     if (!validateForm()) {
       return;
@@ -579,10 +531,9 @@ export function SalonBooking({
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null;
 
-    // response.error.context is the raw Fetch Response object for non-2xx Edge Function calls.
-    // We must await context.json() / context.text() to read the body — it cannot be read
-    // synchronously from context.body. This is the canonical way to extract errorKey.
-    const readErrorBody = async (error: unknown): Promise<Record<string, unknown> | undefined> => {
+    const readErrorBody = async (
+      error: unknown
+    ): Promise<Record<string, unknown> | undefined> => {
       if (!isRecord(error)) return undefined;
       const ctx = error.context;
       if (!ctx || typeof (ctx as Response).text !== "function") return undefined;
@@ -595,7 +546,9 @@ export function SalonBooking({
       }
     };
 
-    const friendlyErrorMessage = (errorKeyOrMessage: string): string | undefined => {
+    const friendlyErrorMessage = (
+      errorKeyOrMessage: string
+    ): string | undefined => {
       switch (errorKeyOrMessage) {
         case "REFERRAL_INVALID":
           return "Referral code bestaat niet.";
@@ -643,36 +596,21 @@ export function SalonBooking({
       }
       if (
         lower.includes("missing required fields") ||
-        lower.includes("invalid treatments array")
+        lower.includes("invalid treatments array") ||
+        lower.includes("invalid services array")
       ) {
         return "Controleer je gegevens en probeer opnieuw.";
       }
       if (
         lower.includes("each treatment must have treatmentid") ||
-        lower.includes("priceoptionid")
+        lower.includes("priceoptionid") ||
+        lower.includes("each service must have") ||
+        lower.includes("servicevariantid") ||
+        lower.includes("staffid")
       ) {
-        return "Er is iets misgegaan met de gekozen behandeling(en). Probeer opnieuw.";
+        return "Er is iets misgegaan met de gekozen dienst(en). Probeer opnieuw.";
       }
       if (lower.includes("internal server error")) {
-        return "Er ging iets mis aan onze kant. Probeer het later opnieuw.";
-      }
-
-      if (errorKeyOrMessage === "Method not allowed") {
-        return "Boeken is tijdelijk niet mogelijk. Probeer het later opnieuw.";
-      }
-      if (errorKeyOrMessage === "Missing required fields or invalid treatments array") {
-        return "Controleer je gegevens en probeer opnieuw.";
-      }
-      if (errorKeyOrMessage === "Each treatment must have treatmentId and priceOptionId") {
-        return "Er is iets misgegaan met de gekozen behandeling(en). Probeer opnieuw.";
-      }
-      if (errorKeyOrMessage === "Invalid image data format") {
-        return "De afbeelding is ongeldig. Upload een andere afbeelding of boek zonder afbeelding.";
-      }
-      if (errorKeyOrMessage === "Image upload failed") {
-        return "Uploaden van de afbeelding is mislukt. Probeer het opnieuw of boek zonder afbeelding.";
-      }
-      if (errorKeyOrMessage === "Internal server error") {
         return "Er ging iets mis aan onze kant. Probeer het later opnieuw.";
       }
 
@@ -683,8 +621,8 @@ export function SalonBooking({
       bookingState.setSubmitting(true);
       if (
         !bookingState.selectedDay ||
-        !bookingState.selectedStaffId ||
-        !bookingState.selectedTimeSlot
+        !bookingState.selectedTimeSlot ||
+        !bookingState.selectedSlotData
       ) {
         toast.error(
           "Er is een probleem met de geselecteerde datum, medewerker of tijd."
@@ -692,73 +630,82 @@ export function SalonBooking({
         return;
       }
 
-      const totalDuration = calculateTotalDuration(
-        bookingState.selectedTreatments
+      const slotStaffId =
+        bookingState.selectedSlotData?.staffId ||
+        bookingState.selectedStaffId ||
+        "";
+
+      const servicesPayload = bookingState.selectedServices.map(
+        (item, index) => {
+          const segmentStaffId =
+            bookingState.selectedSlotData?.segments?.[index]?.staffId ||
+            bookingState.selectedSlotData?.segments?.find(
+              (segment) =>
+                segment.serviceId === item.service.id &&
+                segment.serviceVariantId === item.variant.id
+            )?.staffId;
+          return {
+            serviceId: item.service.id,
+            serviceVariantId: item.variant.id,
+            staffId: segmentStaffId || item.staffId || slotStaffId,
+          };
+        }
       );
-      const appointmentDate = bookingState.selectedDay;
-      const timeString = bookingState.selectedTimeSlot;
 
-      let hours = 0;
-      let minutes = 0;
+      const staffId = slotStaffId || servicesPayload[0]?.staffId || "";
 
-      if (timeString.includes("AM") || timeString.includes("PM")) {
-        const [timePart, period] = timeString.split(" ");
-        const [h, m] = timePart.split(":").map(Number);
-        hours =
-          period === "PM" && h !== 12
-            ? h + 12
-            : period === "AM" && h === 12
-              ? 0
-              : h;
-        minutes = m;
-      } else {
-        const [h, m] = timeString.split(":").map(Number);
-        hours = h;
-        minutes = m;
+      if (!staffId || servicesPayload.some((item) => !item.staffId)) {
+        toast.error(
+          "Er is een probleem met de geselecteerde datum, medewerker of tijd."
+        );
+        return;
       }
 
-      const startTime = new Date(appointmentDate);
-      startTime.setHours(hours);
-      startTime.setMinutes(minutes);
-
-      const tzOffset = startTime.getTimezoneOffset();
-      const startTimeUTC = new Date(startTime.getTime() - tzOffset * 60 * 1000);
-      const endTimeUTC = new Date(
-        startTimeUTC.getTime() + totalDuration * 60 * 1000
+      // Client visit length (busy + free). Buffer is staff lock only.
+      const totalDuration = calculateTotalDuration(
+        bookingState.selectedServices
       );
+      const start = toIsoInstant(bookingState.selectedSlotData.availableStart);
+      const slotEnd = toIsoInstant(bookingState.selectedSlotData.availableEnd);
+      const end =
+        slotEnd ??
+        (start
+          ? new Date(
+              Date.parse(start) + totalDuration * 60 * 1000
+            ).toISOString()
+          : null);
 
-      // Transform all selected treatments into the new format
-      const treatmentsPayload = bookingState.selectedTreatments.map((item) => ({
-        treatmentId: item.treatment.id,
-        priceOptionId: item.option.id,
-      }));
+      if (!start || !end) {
+        toast.error(
+          "Er is een probleem met de geselecteerde datum, medewerker of tijd."
+        );
+        return;
+      }
 
-      const totalPrice = bookingState.selectedTreatments.reduce(
-        (sum, item) => sum + item.option.price,
+      const totalPrice = bookingState.selectedServices.reduce(
+        (sum, item) => sum + item.variant.price,
         0
       );
 
       const referralCodeTrimmed = bookingState.referralCode.trim();
 
-      const response = await supabase.functions.invoke("appointment-create", {
-        body: {
-          start: startTimeUTC.toISOString(),
-          end: endTimeUTC.toISOString(),
-          staffId: bookingState.selectedSlotData?.staffId || "",
-          companyId,
-          treatments: treatmentsPayload,
-          price: totalPrice,
-          duration: totalDuration,
-          firstName: bookingState.firstName,
-          lastName: bookingState.lastName,
-          email: bookingState.email,
-          phone: bookingState.phone,
-          notes: bookingState.notes || "",
-          imageData: imageUpload.imageData,
-          ...(referralCodeTrimmed.length > 0
-            ? { referralCode: referralCodeTrimmed }
-            : {}),
-        },
+      const response = await invokeAppointmentCreate(supabase, {
+        start,
+        end,
+        companyId,
+        staffId,
+        services: servicesPayload,
+        price: totalPrice,
+        duration: totalDuration,
+        firstName: bookingState.firstName,
+        lastName: bookingState.lastName,
+        email: bookingState.email,
+        phone: bookingState.phone,
+        notes: bookingState.notes || "",
+        imageData: imageUpload.imageData,
+        ...(referralCodeTrimmed.length > 0
+          ? { referralCode: referralCodeTrimmed }
+          : {}),
       });
 
       const hasReferralCode = referralCodeTrimmed.length > 0;
@@ -766,10 +713,8 @@ export function SalonBooking({
         isRecord(response.data) && response.data.success === false;
 
       if (response.error || functionReturnedFailure) {
-        // Read the actual JSON body from the Fetch Response stored in error.context.
         const errorBody = await readErrorBody(response.error);
 
-        // errorKey is in the body, e.g. { "error": "Booking failed", "errorKey": "REFERRAL_INVALID" }
         const errorKey =
           typeof errorBody?.errorKey === "string"
             ? errorBody.errorKey
@@ -793,28 +738,34 @@ export function SalonBooking({
       }
 
       const staffName = (() => {
-        if (
-          bookingState.selectedStaffId &&
-          availability.availabilities &&
-          bookingState.selectedDay
-        ) {
-          const dateKey = format(bookingState.selectedDay, "yyyy-MM-dd");
-          const dayAvailability = availability.availabilities.dates[dateKey];
-          const staffMember =
-            dayAvailability?.staff[bookingState.selectedStaffId];
-          return staffMember
-            ? `${staffMember.first_name} ${staffMember.last_name}`
-            : "";
-        }
-        return "";
+        const ids = uniqueStaffIds(bookingState.selectedServices);
+        const names = ids
+          .map((id) => {
+            const member = staffList.staff.find((s) => s.id === id);
+            if (member) return `${member.first_name} ${member.last_name}`;
+            if (
+              availability.availabilities &&
+              bookingState.selectedDay
+            ) {
+              const dateKey = format(bookingState.selectedDay, "yyyy-MM-dd");
+              const fromSlot =
+                availability.availabilities.dates[dateKey]?.staff?.[id];
+              if (fromSlot) {
+                return `${fromSlot.first_name} ${fromSlot.last_name}`;
+              }
+            }
+            return "";
+          })
+          .filter(Boolean);
+        return names.join(" · ");
       })();
 
       setConfirmedBookingData({
         date: bookingState.selectedDay,
         timeSlot: bookingState.selectedTimeSlot,
         staffName,
-        treatments: [...bookingState.selectedTreatments],
-        totalPrice: calculateTotalPrice(bookingState.selectedTreatments),
+        services: [...bookingState.selectedServices],
+        totalPrice: calculateTotalPrice(bookingState.selectedServices),
         referralApplied: referralCodeTrimmed.length > 0,
       });
 
@@ -839,7 +790,6 @@ export function SalonBooking({
     }
   };
 
-  // Confetti effect when confirmation is first shown
   useEffect(() => {
     if (showConfirmation && confirmedBookingData) {
       const timer1 = setTimeout(() => {
@@ -877,7 +827,6 @@ export function SalonBooking({
     }
   }, [showConfirmation, confirmedBookingData]);
 
-  // If showing confirmation, render separate confirmation view
   if (showConfirmation && confirmedBookingData) {
     return (
       <>
@@ -900,6 +849,7 @@ export function SalonBooking({
           bookingData={confirmedBookingData}
           selectedStaffId={bookingState.selectedStaffId}
           availabilities={availability.availabilities}
+          staff={staffList.staff}
           theme={theme}
           supabase={supabase}
           onResetToStep1={() => {
@@ -979,10 +929,11 @@ export function SalonBooking({
       >
         <BookingStepper
           currentStep={bookingState.currentStep}
-          selectedTreatments={bookingState.selectedTreatments}
-          selectedDay={bookingState.selectedDay}
-          selectedStaffId={bookingState.selectedStaffId}
-          selectedTimeSlot={bookingState.selectedTimeSlot}
+          selectedServices={bookingState.selectedServices}
+          canOpenStep2={bookingState.canProceedFromStep1}
+          canOpenStep3={
+            bookingState.canProceedFromStep1 && bookingState.canProceedFromStep2
+          }
           onStepClick={bookingState.handleStepClick}
           headerRight={
             shouldShowStaff &&
@@ -1007,20 +958,20 @@ export function SalonBooking({
           )}
         >
             {bookingState.currentStep === 1 && (
-              <TreatmentSelection
-                treatments={treatments}
-                selectedTreatments={bookingState.selectedTreatments}
+              <ServiceSelection
+                services={services}
+                selectedServices={bookingState.selectedServices}
                 loading={loading}
                 theme={theme}
                 supabase={supabase}
-                onTreatmentSelect={bookingState.handleTreatmentOptionSelect}
-                onRemoveTreatment={bookingState.removeTreatment}
+                onServiceSelect={bookingState.handleServiceVariantSelect}
+                onRemoveService={bookingState.removeService}
               />
             )}
 
             {bookingState.currentStep === 2 && (
               <DateTimeSelection
-                selectedTreatments={bookingState.selectedTreatments}
+                selectedServices={bookingState.selectedServices}
                 availabilities={availability.availabilities}
                 loadingAvailabilities={availability.loadingAvailabilities}
                 weekAvailability={availability.weekAvailability}
@@ -1039,15 +990,16 @@ export function SalonBooking({
                 onNextWeek={handleNextWeek}
                 onDaySelect={handleDaySelect}
                 onStaffSelect={handleStaffSelect}
-                onTimeSlotSelect={(timeSlot, slotData) => {
+                onTimeSlotSelect={(timeSlot: string, slotData: TimeSlot) => {
                   bookingState.setSelectedTimeSlot(timeSlot);
                   bookingState.setSelectedSlotData(slotData);
+                  bookingState.applyStaffFromSlot(slotData);
                 }}
                 onCalendarOpenChange={bookingState.setCalendarOpen}
                 onCalendarSelect={handleCalendarSelect}
                 onCalendarMonthChange={(month) => {
                   bookingState.setCalendarMonth(month);
-                  if (bookingState.selectedTreatments.length > 0) {
+                  if (bookingState.selectedServices.length > 0) {
                     availability.fetchMonthAvailabilities(month);
                   }
                 }}
@@ -1060,11 +1012,12 @@ export function SalonBooking({
 
             {bookingState.currentStep === 3 && (
               <CustomerDetails
-                selectedTreatments={bookingState.selectedTreatments}
+                selectedServices={bookingState.selectedServices}
                 selectedDay={bookingState.selectedDay}
                 selectedTimeSlot={bookingState.selectedTimeSlot}
                 selectedStaffId={bookingState.selectedStaffId}
                 availabilities={availability.availabilities}
+                staff={staffList.staff}
                 firstName={bookingState.firstName}
                 lastName={bookingState.lastName}
                 email={bookingState.email}
@@ -1090,7 +1043,7 @@ export function SalonBooking({
         <BookingFooter
           isMobile={isMobile}
           currentStep={bookingState.currentStep}
-          selectedTreatments={bookingState.selectedTreatments}
+          selectedServices={bookingState.selectedServices}
           submitting={bookingState.submitting}
           onPreviousStep={bookingState.handlePreviousStep}
           onNextStep={bookingState.handleNextStep}
@@ -1226,4 +1179,3 @@ export function SalonBooking({
     </>
   );
 }
-
