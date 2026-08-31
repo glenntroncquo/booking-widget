@@ -596,14 +596,11 @@ export function SalonBooking({
       }
       if (
         lower.includes("missing required fields") ||
-        lower.includes("invalid treatments array") ||
         lower.includes("invalid services array")
       ) {
         return "Controleer je gegevens en probeer opnieuw.";
       }
       if (
-        lower.includes("each treatment must have treatmentid") ||
-        lower.includes("priceoptionid") ||
         lower.includes("each service must have") ||
         lower.includes("servicevariantid") ||
         lower.includes("staffid")

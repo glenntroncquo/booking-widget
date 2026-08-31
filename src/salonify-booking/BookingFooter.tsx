@@ -34,12 +34,12 @@ export function BookingFooter({
           ? `${priceRange.baseTotal} - ${priceRange.maxTotal}`
           : priceRange.baseTotal;
 
-  const hasNoTreatments = selectedServices.length === 0;
+  const hasNoServices = selectedServices.length === 0;
 
   if (isMobile) {
     return (
       <div className="sticky bottom-0 left-0 right-0 bg-white border-t p-4 flex items-center justify-between">
-        {hasNoTreatments && currentStep === 1 ? (
+        {hasNoServices && currentStep === 1 ? (
           <div className="flex items-center justify-between w-full">
             <div className="flex flex-col">
               <span className="text-sm font-medium text-gray-900">
@@ -105,7 +105,7 @@ export function BookingFooter({
 
   return (
     <div className="border-t bg-salon-background p-4 flex justify-between items-center">
-      {hasNoTreatments && currentStep === 1 ? (
+      {hasNoServices && currentStep === 1 ? (
         <div className="flex items-center justify-between w-full">
           <div className="font-medium text-gray-900">
             Heb je hier al eerder geboekt?
