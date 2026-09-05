@@ -62,7 +62,7 @@ export default function AppointmentPage() {
         <div className="max-w-4xl mx-auto">
           <iframe
             ref={iframeRef}
-            src={`${import.meta.env.VITE_WIDGET_URL}?companyId=${import.meta.env.VITE_COMPANY_ID}&supabaseUrl=${import.meta.env.VITE_SUPABASE_URL}&supabaseKey=${import.meta.env.VITE_SUPABASE_ANON_KEY}`}
+            src={`${import.meta.env.VITE_WIDGET_URL}?companyId=${import.meta.env.VITE_COMPANY_ID}${import.meta.env.VITE_LOCATION_ID ? `&locationId=${import.meta.env.VITE_LOCATION_ID}` : ""}`}
             width="100%"
             height="700px"
             frameBorder="0"

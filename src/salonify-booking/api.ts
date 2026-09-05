@@ -6,9 +6,33 @@ import {
   PhaseType,
 } from "./types/types";
 
-export interface ServiceListRequest {
+/** Fields sent on every location-aware edge invoke. */
+export type LocationBodyFields = {
+  location_id?: string;
+  locationId?: string;
+};
+
+export interface ServiceListRequest extends LocationBodyFields {
   company_id: string;
   staff_ids?: string[];
+}
+
+export interface StaffListRequest extends LocationBodyFields {
+  company_id: string;
+}
+
+/**
+ * Attach a resolved location to an edge body.
+ * Always sends `location_id` (DB / snake_case). CamelCase helpers also send
+ * `locationId` so they match `companyId` if the backend PR used that name.
+ */
+export function locationBody(
+  locationId?: string | null,
+  alsoCamel = true
+): LocationBodyFields {
+  if (!locationId) return {};
+  if (alsoCamel) return { location_id: locationId, locationId };
+  return { location_id: locationId };
 }
 
 export interface AvailabilityServiceItem {
@@ -136,6 +160,13 @@ export async function invokeServiceList(
   return supabase.functions.invoke("service-list", { body });
 }
 
+export async function invokeStaffList(
+  supabase: SupabaseClient,
+  body: StaffListRequest
+) {
+  return supabase.functions.invoke("staff-list", { body });
+}
+
 export async function invokeAvailabilityList(
   supabase: SupabaseClient,
   body: {
@@ -144,6 +175,8 @@ export async function invokeAvailabilityList(
     endDate: string;
     services: AvailabilityServiceItem[];
     staffIds?: string[];
+    location_id?: string;
+    locationId?: string;
   }
 ) {
   return supabase.functions.invoke("availability-list", { body });
@@ -166,6 +199,8 @@ export async function invokeAppointmentCreate(
     notes: string;
     imageData: string | null;
     referralCode?: string;
+    location_id?: string;
+    locationId?: string;
   }
 ) {
   return supabase.functions.invoke("appointment-create", { body });

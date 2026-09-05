@@ -34,6 +34,8 @@ interface WidgetConfig {
   showStaff?: boolean;
   staffIds?: string[];
   staffSlugs?: string[];
+  locationId?: string;
+  locationSlug?: string;
 }
 
 interface ErrorState {
@@ -63,6 +65,8 @@ function App() {
 
     const companyId = params.get("companyId");
     const companySlug = params.get("companySlug");
+    const locationId = params.get("locationId");
+    const locationSlug = params.get("locationSlug");
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
     const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
@@ -117,6 +121,8 @@ function App() {
     return {
       companyId,
       companySlug,
+      locationId,
+      locationSlug,
       supabaseUrl,
       supabaseKey,
       themeOverrides,
@@ -146,6 +152,8 @@ function App() {
     const {
       companyId: companyIdParam,
       companySlug,
+      locationId,
+      locationSlug,
       supabaseUrl,
       supabaseKey,
       themeOverrides,
@@ -234,6 +242,8 @@ function App() {
         showStaff,
         staffIds: staffIdsParam,
         staffSlugs,
+        locationId: locationId || undefined,
+        locationSlug: locationSlug || undefined,
       });
       setError(null);
       setLoading(false);
@@ -374,6 +384,8 @@ function App() {
             shouldShowStaff={config.showStaff}
             initialStaffIds={config.staffIds}
             initialStaffSlugs={config.staffSlugs}
+            locationId={config.locationId}
+            locationSlug={config.locationSlug}
           />
         </FloatingLauncher>
       ) : (
@@ -388,6 +400,8 @@ function App() {
           shouldShowStaff={config.showStaff}
           initialStaffIds={config.staffIds}
           initialStaffSlugs={config.staffSlugs}
+          locationId={config.locationId}
+          locationSlug={config.locationSlug}
         />
       )}
     </div>

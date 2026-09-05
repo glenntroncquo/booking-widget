@@ -1,5 +1,10 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { PhaseType, SelectedService, ServiceVariant } from "./types/types";
+import {
+  LocationOption,
+  PhaseType,
+  SelectedService,
+  ServiceVariant,
+} from "./types/types";
 
 type ClassValue =
   | string
@@ -191,6 +196,13 @@ export function daySlotCount(day: {
     (total, staffMember) => total + staffMember.slots.length,
     0
   );
+}
+
+export function formatLocationAddress(location: LocationOption): string {
+  const cityLine = [location.postal_code, location.city]
+    .filter(Boolean)
+    .join(" ");
+  return [location.street, cityLine].filter(Boolean).join(", ");
 }
 
 export const isValidEmail = (email: string): boolean => {

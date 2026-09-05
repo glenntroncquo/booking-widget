@@ -114,6 +114,14 @@ export function BookingConfirmation({
                 <div className="text-sm text-gray-600">{bookingData.timeSlot}</div>
               </div>
 
+              {bookingData.locationName && (
+                <div>
+                  <div className="text-sm text-gray-600">
+                    {bookingData.locationName}
+                  </div>
+                </div>
+              )}
+
               {bookingData.staffName && (
                 <div>
                   <div className="flex items-center gap-2">
