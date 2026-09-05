@@ -21,6 +21,20 @@ export interface SalonBookingProps {
   shouldShowStaff?: boolean;
   initialStaffIds?: string[];
   initialStaffSlugs?: string[];
+  /** Pinned location UUID. Wins over locationSlug. */
+  locationId?: string;
+  /** Pinned location slug, resolved against public.location for this company. */
+  locationSlug?: string;
+}
+
+export interface LocationOption {
+  id: string;
+  name: string;
+  slug: string | null;
+  city: string | null;
+  street: string | null;
+  postal_code: string | null;
+  is_primary?: boolean;
 }
 
 export interface TimeSlot {
@@ -143,6 +157,7 @@ export interface BookingData {
   services: SelectedService[];
   totalPrice: number;
   referralApplied?: boolean;
+  locationName?: string;
 }
 
 export const defaultTheme: SalonTheme = {

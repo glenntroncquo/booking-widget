@@ -19,6 +19,7 @@ import {
   daySlotCount,
   calculateTotalPrice,
   calculateTotalDuration,
+  formatLocationAddress,
   isValidPhone,
   toIsoInstant,
 } from "./utils";
@@ -39,15 +40,18 @@ import { BookingConfirmation } from "./BookingConfirmation";
 import { BookingStepper } from "./BookingStepper";
 import { BookingFooter } from "./BookingFooter";
 import { StaffSelector } from "./StaffSelector";
+import { LocationPicker } from "./LocationPicker";
 import {
   useBookingState,
   useAvailability,
   useImageUpload,
   useStaff,
+  useLocations,
 } from "./hooks";
 import {
   invokeAppointmentCreate,
   invokeServiceList,
+  locationBody,
   normalizeServiceList,
 } from "./api";
 
@@ -59,6 +63,8 @@ export function SalonBooking({
   shouldShowStaff = true,
   initialStaffIds = [],
   initialStaffSlugs = [],
+  locationId: pinnedLocationId,
+  locationSlug: pinnedLocationSlug,
 }: SalonBookingProps) {
   const supabase = useMemo(() => {
     return createClient(supabaseConfig.url, supabaseConfig.anonKey);
@@ -76,14 +82,28 @@ export function SalonBooking({
   const isMobile = useMediaQuery("(max-width: 448px)");
 
   const bookingState = useBookingState(maxDate, initialStaffIds);
+  const locationState = useLocations(
+    supabase,
+    companyId,
+    pinnedLocationId,
+    pinnedLocationSlug
+  );
   const availability = useAvailability(
     supabase,
     companyId,
     bookingState.selectedServices,
-    bookingState.selectedStaffIds
+    bookingState.selectedStaffIds,
+    locationState.selectedId,
+    locationState.locationReady
   );
-  const staffList = useStaff(supabase, companyId);
+  const staffList = useStaff(
+    supabase,
+    companyId,
+    locationState.selectedId,
+    locationState.locationReady
+  );
   const imageUpload = useImageUpload();
+  const previousLocationId = useRef<string | null>(null);
 
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,15 +202,23 @@ export function SalonBooking({
 
   const staffFilterKey = JSON.stringify(bookingState.selectedStaffIds);
   const staffSlugKey = JSON.stringify(initialStaffSlugs);
+  const slugSelectionAppliedRef = useRef(false);
   useEffect(() => {
     let cancelled = false;
 
     async function fetchServices() {
+      if (!locationState.locationReady) {
+        setServices([]);
+        setLoading(true);
+        return;
+      }
+
       setLoading(true);
       try {
         const staffIds: string[] = JSON.parse(staffFilterKey);
         const { data, error } = await invokeServiceList(supabase, {
           company_id: companyId,
+          ...locationBody(locationState.selectedId),
           ...(staffIds.length > 0 ? { staff_ids: staffIds } : {}),
         });
 
@@ -218,9 +246,27 @@ export function SalonBooking({
     return () => {
       cancelled = true;
     };
-  }, [supabase, companyId, staffFilterKey]);
+  }, [
+    supabase,
+    companyId,
+    staffFilterKey,
+    locationState.selectedId,
+    locationState.locationReady,
+  ]);
 
-  const slugSelectionAppliedRef = useRef(false);
+  useEffect(() => {
+    if (previousLocationId.current === locationState.selectedId) return;
+    if (previousLocationId.current !== null) {
+      slugSelectionAppliedRef.current = false;
+      bookingState.hasUserChangedStaff.current = false;
+      bookingState.resetToStep1();
+      availability.resetAvailability();
+      setServices([]);
+    }
+    previousLocationId.current = locationState.selectedId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationState.selectedId]);
+
   useEffect(() => {
     if (slugSelectionAppliedRef.current) return;
     if (bookingState.hasUserChangedStaff.current) {
@@ -700,6 +746,7 @@ export function SalonBooking({
         phone: bookingState.phone,
         notes: bookingState.notes || "",
         imageData: imageUpload.imageData,
+        ...locationBody(locationState.selectedId),
         ...(referralCodeTrimmed.length > 0
           ? { referralCode: referralCodeTrimmed }
           : {}),
@@ -764,6 +811,7 @@ export function SalonBooking({
         services: [...bookingState.selectedServices],
         totalPrice: calculateTotalPrice(bookingState.selectedServices),
         referralApplied: referralCodeTrimmed.length > 0,
+        locationName: locationState.selectedLocation?.name,
       });
 
       toast.success(
@@ -933,6 +981,7 @@ export function SalonBooking({
           }
           onStepClick={bookingState.handleStepClick}
           headerRight={
+            !locationState.needsPicker &&
             shouldShowStaff &&
             (bookingState.currentStep === 1 ||
               bookingState.currentStep === 2) &&
@@ -954,19 +1003,72 @@ export function SalonBooking({
             isMobile ? "flex-1 min-h-0" : "h-[500px]"
           )}
         >
-            {bookingState.currentStep === 1 && (
-              <ServiceSelection
-                services={services}
-                selectedServices={bookingState.selectedServices}
-                loading={loading}
+            {locationState.loading ? (
+              <div className="text-center py-8">
+                <div className="flex flex-col items-center gap-4">
+                  <div
+                    className="animate-spin rounded-full h-8 w-8 border-b-2 border-transparent"
+                    style={{ borderBottomColor: theme.primary }}
+                  />
+                  <p className="text-gray-500 text-sm">Vestigingen laden...</p>
+                </div>
+              </div>
+            ) : locationState.needsPicker ? (
+              <LocationPicker
+                locations={locationState.locations}
                 theme={theme}
-                supabase={supabase}
-                onServiceSelect={bookingState.handleServiceVariantSelect}
-                onRemoveService={bookingState.removeService}
+                onSelect={(id) => {
+                  locationState.selectLocation(id);
+                  bookingState.resetToStep1();
+                  availability.resetAvailability();
+                }}
               />
+            ) : (
+              <>
+            {bookingState.currentStep === 1 && (
+              <>
+                {locationState.selectedLocation &&
+                  locationState.locations.length > 1 && (
+                    <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {locationState.selectedLocation.name}
+                        </p>
+                        {formatLocationAddress(locationState.selectedLocation) ? (
+                          <p className="text-xs text-gray-500 truncate">
+                            {formatLocationAddress(
+                              locationState.selectedLocation
+                            )}
+                          </p>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        className="shrink-0 text-sm font-medium text-salon-primary"
+                        onClick={() => {
+                          locationState.clearLocation();
+                          bookingState.resetToStep1();
+                          availability.resetAvailability();
+                          setServices([]);
+                        }}
+                      >
+                        Wijzig
+                      </button>
+                    </div>
+                  )}
+                <ServiceSelection
+                  services={services}
+                  selectedServices={bookingState.selectedServices}
+                  loading={loading}
+                  theme={theme}
+                  supabase={supabase}
+                  onServiceSelect={bookingState.handleServiceVariantSelect}
+                  onRemoveService={bookingState.removeService}
+                />
+              </>
             )}
 
-            {bookingState.currentStep === 2 && (
+            {bookingState.currentStep === 2 && !locationState.needsPicker && (
               <DateTimeSelection
                 selectedServices={bookingState.selectedServices}
                 availabilities={availability.availabilities}
@@ -1007,7 +1109,7 @@ export function SalonBooking({
               />
             )}
 
-            {bookingState.currentStep === 3 && (
+            {bookingState.currentStep === 3 && !locationState.needsPicker && (
               <CustomerDetails
                 selectedServices={bookingState.selectedServices}
                 selectedDay={bookingState.selectedDay}
@@ -1035,8 +1137,11 @@ export function SalonBooking({
                 onRemoveImage={imageUpload.removeImage}
               />
             )}
+              </>
+            )}
         </div>
 
+        {!locationState.needsPicker && !locationState.loading && (
         <BookingFooter
           isMobile={isMobile}
           currentStep={bookingState.currentStep}
@@ -1047,6 +1152,7 @@ export function SalonBooking({
           onSubmit={handleSubmit}
           onShowEmailInput={() => setShowEmailInput(true)}
         />
+        )}
 
         {showEmailInput && (
           <>

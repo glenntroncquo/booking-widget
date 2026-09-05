@@ -10,13 +10,15 @@ import {
 } from "date-fns";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Availabilities, SelectedService, DayAvailability } from "../types";
-import { invokeAvailabilityList } from "../api";
+import { invokeAvailabilityList, locationBody } from "../api";
 
 export function useAvailability(
   supabase: SupabaseClient,
   companyId: string,
   selectedServices: SelectedService[],
-  selectedStaffIds: string[] = []
+  selectedStaffIds: string[] = [],
+  locationId: string | null = null,
+  locationReady = true
 ) {
   const [availabilities, setAvailabilities] = useState<Availabilities | null>(
     null
@@ -34,6 +36,7 @@ export function useAvailability(
 
   const fetchMonthAvailabilities = useCallback(
     async (month: Date) => {
+      if (!locationReady) return;
       if (selectedServices.length === 0) return;
       if (loadingAvailabilities) return;
 
@@ -56,6 +59,7 @@ export function useAvailability(
           endDate,
           services,
           companyId,
+          ...locationBody(locationId),
           ...(selectedStaffIds.length > 0
             ? { staffIds: selectedStaffIds }
             : {}),
@@ -95,6 +99,8 @@ export function useAvailability(
       companyId,
       loadingAvailabilities,
       selectedStaffIds,
+      locationId,
+      locationReady,
     ]
   );
 

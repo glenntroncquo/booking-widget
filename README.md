@@ -67,12 +67,16 @@ iframe a sensible height for the space it occupies.
 
 ### Required Parameters
 
-- `companyId` - The company ID for bookings
-- `supabaseUrl` - Your Supabase project URL
-- `supabaseKey` - Your Supabase anon/public key
+- `companyId` **or** `companySlug` - The company for bookings
+
+Supabase URL and anon key come from the widget environment (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`), not from the iframe query string.
 
 ### Optional Parameters
 
+- `locationId` - Pin a location UUID. Wins over `locationSlug`. When set, services/staff/availability load for that location.
+- `locationSlug` - Pin a location by slug (resolved against `public.location` for the company).
+- `staffIds` - Comma-separated staff UUIDs to preselect (after location is known).
+- `staffSlugs` - Comma-separated staff slugs to preselect.
 - `primary` - Primary theme color (hex code)
 - `primaryHover` - Primary hover color (hex code)
 - `primaryLight` - Primary light color (hex code)
@@ -81,6 +85,28 @@ iframe a sensible height for the space it occupies.
 - `background` - Background color (hex code)
 - `maxDate` - Maximum booking date (ISO string, e.g., `2024-12-31`)
 - `showStaff` - Show staff selection (`true` or `false`, default: `true`)
+
+### Multi-location embed URLs
+
+The booking site will match this flow:
+
+| URL | Behavior |
+|---|---|
+| `?companyId=COMPANY` or `?companySlug=glennie` | If the company has more than one active location, a location picker is shown first. If there is only one, it is selected automatically. |
+| `?companyId=COMPANY&locationId=LOCATION` | Skip picker. Load services + staff for that location. |
+| `?companySlug=glennie&locationSlug=gent` | Resolve the location slug, then load services + staff. |
+| `?companyId=COMPANY&locationId=LOCATION&staffIds=STAFF` | Same as above, and preselect staff. |
+
+`locationId` always wins over `locationSlug`. React embeds use the same names as props (`locationId`, `locationSlug`). `widget-config` postMessage can update them too.
+
+Examples:
+
+```
+https://your-domain.com/widget?companyId=xxx
+https://your-domain.com/widget?companyId=xxx&locationId=yyy
+https://your-domain.com/widget?companySlug=glennie&locationSlug=gent
+https://your-domain.com/widget?companyId=xxx&locationId=yyy&staffIds=zzz
+```
 
 ### Example with Theme
 
@@ -203,6 +229,7 @@ iframe.contentWindow.postMessage({
       // ... other theme properties
     },
     showStaff: true,
+    locationId: "LOCATION_UUID",
     maxDate: new Date("2024-12-31"),
   }
 }, "*");
