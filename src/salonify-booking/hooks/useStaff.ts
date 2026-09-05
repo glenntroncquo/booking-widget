@@ -26,7 +26,7 @@ export function useStaff(
       try {
         const { data, error } = await invokeStaffList(supabase, {
           company_id: companyId,
-          ...locationBody(locationId),
+          ...locationBody(locationId, false),
         });
 
         if (cancelled) return;

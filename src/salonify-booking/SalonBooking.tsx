@@ -218,7 +218,7 @@ export function SalonBooking({
         const staffIds: string[] = JSON.parse(staffFilterKey);
         const { data, error } = await invokeServiceList(supabase, {
           company_id: companyId,
-          ...locationBody(locationState.selectedId),
+          ...locationBody(locationState.selectedId, false),
           ...(staffIds.length > 0 ? { staff_ids: staffIds } : {}),
         });
 

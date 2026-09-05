@@ -23,15 +23,16 @@ export interface StaffListRequest extends LocationBodyFields {
 
 /**
  * Attach a resolved location to an edge body.
- * Always sends `location_id` (DB / snake_case). Also sends `locationId` so
- * camelCase helpers (`availability-list`, `appointment-create`) match
- * `companyId` if the backend PR used that name.
+ * Always sends `location_id` (DB / snake_case). CamelCase helpers also send
+ * `locationId` so they match `companyId` if the backend PR used that name.
  */
 export function locationBody(
-  locationId?: string | null
+  locationId?: string | null,
+  alsoCamel = true
 ): LocationBodyFields {
   if (!locationId) return {};
-  return { location_id: locationId, locationId };
+  if (alsoCamel) return { location_id: locationId, locationId };
+  return { location_id: locationId };
 }
 
 export interface AvailabilityServiceItem {
