@@ -94,13 +94,15 @@ export function SalonBooking({
     bookingState.selectedServices,
     bookingState.selectedStaffIds,
     locationState.selectedId,
-    locationState.locationReady
+    locationState.locationReady,
+    locationState.isMultiLocation
   );
   const staffList = useStaff(
     supabase,
     companyId,
     locationState.selectedId,
-    locationState.locationReady
+    locationState.locationReady,
+    locationState.isMultiLocation
   );
   const imageUpload = useImageUpload();
   const previousLocationId = useRef<string | null>(null);
@@ -207,7 +209,10 @@ export function SalonBooking({
     let cancelled = false;
 
     async function fetchServices() {
-      if (!locationState.locationReady) {
+      if (
+        !locationState.locationReady ||
+        (locationState.isMultiLocation && !locationState.selectedId)
+      ) {
         setServices([]);
         setLoading(true);
         return;
@@ -252,6 +257,7 @@ export function SalonBooking({
     staffFilterKey,
     locationState.selectedId,
     locationState.locationReady,
+    locationState.isMultiLocation,
   ]);
 
   useEffect(() => {
@@ -574,6 +580,11 @@ export function SalonBooking({
       return;
     }
 
+    if (locationState.isMultiLocation && !locationState.selectedId) {
+      toast.error("Kies eerst een vestiging om te boeken.");
+      return;
+    }
+
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null;
 
@@ -812,6 +823,9 @@ export function SalonBooking({
         totalPrice: calculateTotalPrice(bookingState.selectedServices),
         referralApplied: referralCodeTrimmed.length > 0,
         locationName: locationState.selectedLocation?.name,
+        locationAddress: locationState.selectedLocation
+          ? formatLocationAddress(locationState.selectedLocation) || undefined
+          : undefined,
       });
 
       toast.success(
@@ -1023,6 +1037,25 @@ export function SalonBooking({
                   availability.resetAvailability();
                 }}
               />
+            ) : locationState.locationBlocked ? (
+              <div className="text-center py-8">
+                <div className="flex flex-col items-center gap-3">
+                  <p className="text-gray-900 font-medium">
+                    Kies een vestiging
+                  </p>
+                  <p className="text-gray-500 text-sm max-w-xs">
+                    Deze zaak heeft meerdere vestigingen. We konden de lijst
+                    niet laden, dus we starten geen boeking zonder vestiging.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-salon-primary"
+                    onClick={() => locationState.reload()}
+                  >
+                    Opnieuw proberen
+                  </button>
+                </div>
+              </div>
             ) : (
               <>
             {bookingState.currentStep === 1 && (
@@ -1141,7 +1174,9 @@ export function SalonBooking({
             )}
         </div>
 
-        {!locationState.needsPicker && !locationState.loading && (
+        {!locationState.needsPicker &&
+          !locationState.loading &&
+          !locationState.locationBlocked && (
         <BookingFooter
           isMobile={isMobile}
           currentStep={bookingState.currentStep}

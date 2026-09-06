@@ -158,6 +158,7 @@ export interface BookingData {
   totalPrice: number;
   referralApplied?: boolean;
   locationName?: string;
+  locationAddress?: string;
 }
 
 export const defaultTheme: SalonTheme = {

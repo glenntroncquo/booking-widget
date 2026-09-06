@@ -43,6 +43,48 @@ function resolveFromList(
   return null;
 }
 
+function readMultiLocationFlag(row: unknown): boolean {
+  if (typeof row !== "object" || row === null) return false;
+  return (row as { multi_location_enabled?: unknown }).multi_location_enabled === true;
+}
+
+export function isMultiLocationCompany(
+  multiLocationEnabled: boolean,
+  locationCount: number
+): boolean {
+  return multiLocationEnabled || locationCount > 1;
+}
+
+/** Edges may run only with a selected location, or the single-location / flag-off fallback. */
+export function computeLocationReady(args: {
+  selectedId: string | null;
+  loading: boolean;
+  loadError: boolean;
+  locationCount: number;
+  multiLocationEnabled: boolean;
+}): boolean {
+  if (args.selectedId !== null) return true;
+  if (args.loading) return false;
+  if (isMultiLocationCompany(args.multiLocationEnabled, args.locationCount)) {
+    return false;
+  }
+  return args.loadError || args.locationCount <= 1;
+}
+
+/** Multi-location company with no selected id and no picker list — show error, not company-wide edges. */
+export function computeLocationBlocked(args: {
+  selectedId: string | null;
+  loading: boolean;
+  locationCount: number;
+  multiLocationEnabled: boolean;
+}): boolean {
+  if (args.loading || args.selectedId !== null) return false;
+  if (!isMultiLocationCompany(args.multiLocationEnabled, args.locationCount)) {
+    return false;
+  }
+  return args.locationCount <= 1;
+}
+
 export function useLocations(
   supabase: SupabaseClient,
   companyId: string,
@@ -55,6 +97,8 @@ export function useLocations(
   );
   const [loading, setLoading] = useState(!pinnedLocationId);
   const [loadError, setLoadError] = useState(false);
+  const [multiLocationEnabled, setMultiLocationEnabled] = useState(false);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,20 +108,32 @@ export function useLocations(
         setLoading(true);
       }
 
-      const { data, error } = await supabase
-        .from("location")
-        .select("id, name, slug, city, street, postal_code, is_primary")
-        .eq("company_id", companyId)
-        .eq("is_active", true)
-        .order("is_primary", { ascending: false })
-        .order("name", { ascending: true });
+      const [locationResult, companyResult] = await Promise.all([
+        supabase
+          .from("location")
+          .select("id, name, slug, city, street, postal_code, is_primary")
+          .eq("company_id", companyId)
+          .eq("is_active", true)
+          .order("is_primary", { ascending: false })
+          .order("name", { ascending: true }),
+        supabase
+          .from("company")
+          .select("multi_location_enabled")
+          .eq("id", companyId)
+          .maybeSingle(),
+      ]);
 
       if (cancelled) return;
 
-      if (error) {
+      const flag = companyResult.error
+        ? false
+        : readMultiLocationFlag(companyResult.data);
+      setMultiLocationEnabled(flag);
+
+      if (locationResult.error) {
         console.warn(
           "[Salonify Widget] Failed to load locations:",
-          error.message
+          locationResult.error.message
         );
         setLoadError(true);
         setLocations([]);
@@ -90,7 +146,7 @@ export function useLocations(
         return;
       }
 
-      const rows = (Array.isArray(data) ? data : [])
+      const rows = (Array.isArray(locationResult.data) ? locationResult.data : [])
         .map(asLocation)
         .filter((row): row is LocationOption => row !== null);
 
@@ -105,7 +161,7 @@ export function useLocations(
     return () => {
       cancelled = true;
     };
-  }, [supabase, companyId, pinnedLocationId, pinnedLocationSlug]);
+  }, [supabase, companyId, pinnedLocationId, pinnedLocationSlug, reloadNonce]);
 
   const selectLocation = useCallback((locationId: string) => {
     setSelectedId(locationId);
@@ -115,16 +171,37 @@ export function useLocations(
     setSelectedId(null);
   }, []);
 
+  const reload = useCallback(() => {
+    setLoadError(false);
+    setLoading(true);
+    setReloadNonce((nonce) => nonce + 1);
+  }, []);
+
   const selectedLocation =
     locations.find((row) => row.id === selectedId) ?? null;
+
+  const isMultiLocation = isMultiLocationCompany(
+    multiLocationEnabled,
+    locations.length
+  );
 
   const needsPicker =
     !loading && selectedId === null && locations.length > 1;
 
-  // Edges may run once we know a location, or after a failed/empty list
-  // (single-location / flag-off fallback — trigger still stamps primary).
-  const locationReady =
-    selectedId !== null || (!loading && (loadError || locations.length <= 1));
+  const locationBlocked = computeLocationBlocked({
+    selectedId,
+    loading,
+    locationCount: locations.length,
+    multiLocationEnabled,
+  });
+
+  const locationReady = computeLocationReady({
+    selectedId,
+    loading,
+    loadError,
+    locationCount: locations.length,
+    multiLocationEnabled,
+  });
 
   return {
     locations,
@@ -132,8 +209,12 @@ export function useLocations(
     selectedLocation,
     selectLocation,
     clearLocation,
+    reload,
     needsPicker,
+    locationBlocked,
     locationReady,
+    isMultiLocation,
+    multiLocationEnabled,
     loading,
     loadError,
   };

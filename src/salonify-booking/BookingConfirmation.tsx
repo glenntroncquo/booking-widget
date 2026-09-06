@@ -114,11 +114,18 @@ export function BookingConfirmation({
                 <div className="text-sm text-gray-600">{bookingData.timeSlot}</div>
               </div>
 
-              {bookingData.locationName && (
+              {(bookingData.locationName || bookingData.locationAddress) && (
                 <div>
-                  <div className="text-sm text-gray-600">
-                    {bookingData.locationName}
-                  </div>
+                  {bookingData.locationName ? (
+                    <div className="text-sm text-gray-600">
+                      {bookingData.locationName}
+                    </div>
+                  ) : null}
+                  {bookingData.locationAddress ? (
+                    <div className="text-xs text-gray-500">
+                      {bookingData.locationAddress}
+                    </div>
+                  ) : null}
                 </div>
               )}
 

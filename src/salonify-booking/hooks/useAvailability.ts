@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   format,
   addDays,
@@ -12,13 +12,23 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { Availabilities, SelectedService, DayAvailability } from "../types";
 import { invokeAvailabilityList, locationBody } from "../api";
 
+/** Cache key for one availability month. Must include tenant + shop. */
+export function availabilityMonthKey(
+  companyId: string,
+  locationId: string | null,
+  date: Date
+): string {
+  return `${companyId}:${locationId ?? "none"}:${getYear(date)}-${getMonth(date)}`;
+}
+
 export function useAvailability(
   supabase: SupabaseClient,
   companyId: string,
   selectedServices: SelectedService[],
   selectedStaffIds: string[] = [],
   locationId: string | null = null,
-  locationReady = true
+  locationReady = true,
+  requireLocation = false
 ) {
   const [availabilities, setAvailabilities] = useState<Availabilities | null>(
     null
@@ -29,21 +39,33 @@ export function useAvailability(
   );
 
   const fetchedMonths = useRef<Set<string>>(new Set());
+  const inFlightMonths = useRef<Set<string>>(new Set());
+  const scopeEpochRef = useRef(0);
 
-  const getMonthKey = (date: Date): string => {
-    return `${getYear(date)}-${getMonth(date)}`;
-  };
+  const clearCache = useCallback(() => {
+    scopeEpochRef.current += 1;
+    fetchedMonths.current.clear();
+    inFlightMonths.current.clear();
+    setAvailabilities(null);
+    setWeekAvailability([]);
+    setLoadingAvailabilities(false);
+  }, []);
+
+  useEffect(() => {
+    clearCache();
+  }, [companyId, locationId, clearCache]);
 
   const fetchMonthAvailabilities = useCallback(
     async (month: Date) => {
-      if (!locationReady) return;
+      if (!locationReady || (requireLocation && !locationId)) return;
       if (selectedServices.length === 0) return;
-      if (loadingAvailabilities) return;
 
-      const monthKey = getMonthKey(month);
-
+      const monthKey = availabilityMonthKey(companyId, locationId, month);
       if (fetchedMonths.current.has(monthKey)) return;
+      if (inFlightMonths.current.has(monthKey)) return;
 
+      const epoch = scopeEpochRef.current;
+      inFlightMonths.current.add(monthKey);
       setLoadingAvailabilities(true);
       try {
         const startDate = format(startOfMonth(month), "yyyy-MM-dd");
@@ -64,6 +86,8 @@ export function useAvailability(
             ? { staffIds: selectedStaffIds }
             : {}),
         });
+
+        if (scopeEpochRef.current !== epoch) return;
 
         if (error) {
           console.error("Error fetching month availabilities:", error);
@@ -88,26 +112,30 @@ export function useAvailability(
           fetchedMonths.current.add(monthKey);
         }
       } catch (err) {
+        if (scopeEpochRef.current !== epoch) return;
         console.error("Failed to fetch month availabilities:", err);
       } finally {
-        setLoadingAvailabilities(false);
+        if (scopeEpochRef.current === epoch) {
+          inFlightMonths.current.delete(monthKey);
+          setLoadingAvailabilities(inFlightMonths.current.size > 0);
+        }
       }
     },
     [
       selectedServices,
       supabase,
       companyId,
-      loadingAvailabilities,
       selectedStaffIds,
       locationId,
       locationReady,
+      requireLocation,
     ]
   );
 
   const fetchRequiredMonths = useCallback(
     async (currentEndOfWeek: Date, weeksToShow: number = 2) => {
+      if (!locationReady || (requireLocation && !locationId)) return;
       if (selectedServices.length === 0) return;
-      if (loadingAvailabilities) return;
 
       const monthsToFetch: Date[] = [];
 
@@ -119,9 +147,16 @@ export function useAvailability(
       const lastMonth = endOfMonth(endDate);
 
       while (currentMonth <= lastMonth) {
-        const monthKey = getMonthKey(currentMonth);
+        const monthKey = availabilityMonthKey(
+          companyId,
+          locationId,
+          currentMonth
+        );
 
-        if (!fetchedMonths.current.has(monthKey)) {
+        if (
+          !fetchedMonths.current.has(monthKey) &&
+          !inFlightMonths.current.has(monthKey)
+        ) {
           monthsToFetch.push(new Date(currentMonth));
         }
 
@@ -132,7 +167,14 @@ export function useAvailability(
         await fetchMonthAvailabilities(month);
       }
     },
-    [selectedServices, loadingAvailabilities, fetchMonthAvailabilities]
+    [
+      selectedServices,
+      fetchMonthAvailabilities,
+      locationReady,
+      companyId,
+      locationId,
+      requireLocation,
+    ]
   );
 
   const updateWeekAvailabilityFromApi = useCallback(
@@ -176,12 +218,7 @@ export function useAvailability(
     [availabilities]
   );
 
-  const resetAvailability = () => {
-    setAvailabilities(null);
-    setWeekAvailability([]);
-    setLoadingAvailabilities(false);
-    fetchedMonths.current.clear();
-  };
+  const resetAvailability = clearCache;
 
   return {
     availabilities,

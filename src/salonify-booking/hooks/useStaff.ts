@@ -7,7 +7,8 @@ export function useStaff(
   supabase: SupabaseClient,
   companyId: string,
   locationId: string | null = null,
-  locationReady = true
+  locationReady = true,
+  requireLocation = false
 ) {
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -16,7 +17,7 @@ export function useStaff(
     let cancelled = false;
 
     async function fetchStaff() {
-      if (!locationReady) {
+      if (!locationReady || (requireLocation && !locationId)) {
         setStaff([]);
         setLoading(false);
         return;
@@ -59,7 +60,7 @@ export function useStaff(
     return () => {
       cancelled = true;
     };
-  }, [supabase, companyId, locationId, locationReady]);
+  }, [supabase, companyId, locationId, locationReady, requireLocation]);
 
   return { staff, loading };
 }
