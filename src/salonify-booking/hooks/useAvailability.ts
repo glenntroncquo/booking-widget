@@ -115,9 +115,10 @@ export function useAvailability(
         if (scopeEpochRef.current !== epoch) return;
         console.error("Failed to fetch month availabilities:", err);
       } finally {
-        if (scopeEpochRef.current !== epoch) return;
-        inFlightMonths.current.delete(monthKey);
-        setLoadingAvailabilities(inFlightMonths.current.size > 0);
+        if (scopeEpochRef.current === epoch) {
+          inFlightMonths.current.delete(monthKey);
+          setLoadingAvailabilities(inFlightMonths.current.size > 0);
+        }
       }
     },
     [
