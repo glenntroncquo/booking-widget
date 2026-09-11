@@ -8,7 +8,11 @@ import {
   parsePositiveNumber,
   readHttpUrl,
 } from "./salonify-booking/deposit";
-import { classifyWidgetBoot } from "./salonify-booking/widgetBoot";
+import {
+  classifyCompanyRef,
+  classifyWidgetBoot,
+  readCompanyQuery,
+} from "./salonify-booking/widgetBoot";
 
 // Define SalonTheme locally (not exported from package)
 interface SalonTheme {
@@ -75,8 +79,7 @@ function App() {
   const parseUrlParams = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
 
-    const companyId = params.get("companyId");
-    const companySlug = params.get("companySlug");
+    const { companyId, companySlug } = readCompanyQuery(params);
     const locationId = params.get("locationId");
     const locationSlug = params.get("locationSlug");
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
@@ -163,6 +166,10 @@ function App() {
     console.log("[Salonify Widget] Initializing...");
     console.log("[Salonify Widget] URL params:", window.location.search);
     
+    const companyRef = classifyCompanyRef({
+      companyId: parseUrlParams.companyId,
+      companySlug: parseUrlParams.companySlug,
+    });
     const boot = classifyWidgetBoot({
       companyId: parseUrlParams.companyId,
       companySlug: parseUrlParams.companySlug,
@@ -190,8 +197,6 @@ function App() {
     }
 
     const {
-      companyId: companyIdParam,
-      companySlug,
       locationId,
       locationSlug,
       supabaseUrl,
@@ -210,11 +215,11 @@ function App() {
     let cancelled = false;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Resolve a company slug to its id. A companyId in the URL takes precedence.
+    // UUID companyId wins. A non-UUID companyId is a slug (host /glennie parity).
     const resolveCompanyId = async (): Promise<string | null> => {
-      if (companyIdParam) return companyIdParam;
-      if (!companySlug) return null;
-      return resolveCompanyIdBySlug(supabase, companySlug);
+      if (!companyRef) return null;
+      if (companyRef.kind === "id") return companyRef.value;
+      return resolveCompanyIdBySlug(supabase, companyRef.value);
     };
 
     // Fetch per-company styles from company_integrations (config.styles) and
@@ -250,10 +255,47 @@ function App() {
     };
 
     const initialize = async () => {
-      const companyId = await resolveCompanyId();
-      if (cancelled) return;
+      try {
+        const companyId = await resolveCompanyId();
+        if (cancelled) return;
 
-      if (!companyId) {
+        if (!companyId) {
+          setMissingCompany(false);
+          setError({
+            title: "Company Not Found",
+            message:
+              "Could not resolve the company from the provided companyId or companySlug.",
+          });
+          setLoading(false);
+          return;
+        }
+
+        const theme = await loadStyles(companyId);
+        if (cancelled) return;
+
+        setConfig({
+          companyId,
+          supabaseUrl,
+          supabaseKey,
+          theme,
+          maxDate,
+          showStaff,
+          staffIds: staffIdsParam,
+          staffSlugs,
+          locationId: locationId || undefined,
+          locationSlug: locationSlug || undefined,
+          successUrl,
+          cancelUrl,
+          depositAmount,
+          depositEnabled,
+        });
+        setMissingCompany(false);
+        setError(null);
+        setLoading(false);
+        console.log("[Salonify Widget] Configuration set successfully");
+      } catch (err) {
+        if (cancelled) return;
+        console.error("[Salonify Widget] Failed to resolve company:", err);
         setMissingCompany(false);
         setError({
           title: "Company Not Found",
@@ -261,32 +303,7 @@ function App() {
             "Could not resolve the company from the provided companyId or companySlug.",
         });
         setLoading(false);
-        return;
       }
-
-      const theme = await loadStyles(companyId);
-      if (cancelled) return;
-
-      setConfig({
-        companyId,
-        supabaseUrl,
-        supabaseKey,
-        theme,
-        maxDate,
-        showStaff,
-        staffIds: staffIdsParam,
-        staffSlugs,
-        locationId: locationId || undefined,
-        locationSlug: locationSlug || undefined,
-        successUrl,
-        cancelUrl,
-        depositAmount,
-        depositEnabled,
-      });
-      setMissingCompany(false);
-      setError(null);
-      setLoading(false);
-      console.log("[Salonify Widget] Configuration set successfully");
     };
 
     initialize();
