@@ -43,43 +43,37 @@ function resolveFromList(
   return null;
 }
 
-function readMultiLocationFlag(row: unknown): boolean {
-  if (typeof row !== "object" || row === null) return false;
-  return (row as { multi_location_enabled?: unknown }).multi_location_enabled === true;
+export function isMultiLocationCompany(locationCount: number): boolean {
+  return locationCount > 1;
 }
 
-export function isMultiLocationCompany(
-  multiLocationEnabled: boolean,
-  locationCount: number
-): boolean {
-  return multiLocationEnabled || locationCount > 1;
-}
-
-/** Edges may run only with a selected location, or the single-location / flag-off fallback. */
+/** Edges may run only with a selected location, or the single-location / load-error fallback. */
 export function computeLocationReady(args: {
   selectedId: string | null;
   loading: boolean;
   loadError: boolean;
   locationCount: number;
-  multiLocationEnabled: boolean;
 }): boolean {
   if (args.selectedId !== null) return true;
   if (args.loading) return false;
-  if (isMultiLocationCompany(args.multiLocationEnabled, args.locationCount)) {
+  if (isMultiLocationCompany(args.locationCount)) {
     return false;
   }
   return args.loadError || args.locationCount <= 1;
 }
 
-/** Multi-location company with no selected id and no picker list — show error, not company-wide edges. */
+/**
+ * Multi-location with no selected id and no picker list.
+ * Count-only detection means this is unreachable (count > 1 always has a picker).
+ * Kept so the UI still fail-closes if that invariant changes.
+ */
 export function computeLocationBlocked(args: {
   selectedId: string | null;
   loading: boolean;
   locationCount: number;
-  multiLocationEnabled: boolean;
 }): boolean {
   if (args.loading || args.selectedId !== null) return false;
-  if (!isMultiLocationCompany(args.multiLocationEnabled, args.locationCount)) {
+  if (!isMultiLocationCompany(args.locationCount)) {
     return false;
   }
   return args.locationCount <= 1;
@@ -97,7 +91,6 @@ export function useLocations(
   );
   const [loading, setLoading] = useState(!pinnedLocationId);
   const [loadError, setLoadError] = useState(false);
-  const [multiLocationEnabled, setMultiLocationEnabled] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
@@ -108,27 +101,15 @@ export function useLocations(
         setLoading(true);
       }
 
-      const [locationResult, companyResult] = await Promise.all([
-        supabase
-          .from("location")
-          .select("id, name, slug, city, street, postal_code, is_primary")
-          .eq("company_id", companyId)
-          .eq("is_active", true)
-          .order("is_primary", { ascending: false })
-          .order("name", { ascending: true }),
-        supabase
-          .from("company")
-          .select("multi_location_enabled")
-          .eq("id", companyId)
-          .maybeSingle(),
-      ]);
+      const locationResult = await supabase
+        .from("location")
+        .select("id, name, slug, city, street, postal_code, is_primary")
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .order("is_primary", { ascending: false })
+        .order("name", { ascending: true });
 
       if (cancelled) return;
-
-      const flag = companyResult.error
-        ? false
-        : readMultiLocationFlag(companyResult.data);
-      setMultiLocationEnabled(flag);
 
       if (locationResult.error) {
         console.warn(
@@ -180,10 +161,7 @@ export function useLocations(
   const selectedLocation =
     locations.find((row) => row.id === selectedId) ?? null;
 
-  const isMultiLocation = isMultiLocationCompany(
-    multiLocationEnabled,
-    locations.length
-  );
+  const isMultiLocation = isMultiLocationCompany(locations.length);
 
   const needsPicker =
     !loading && selectedId === null && locations.length > 1;
@@ -192,7 +170,6 @@ export function useLocations(
     selectedId,
     loading,
     locationCount: locations.length,
-    multiLocationEnabled,
   });
 
   const locationReady = computeLocationReady({
@@ -200,7 +177,6 @@ export function useLocations(
     loading,
     loadError,
     locationCount: locations.length,
-    multiLocationEnabled,
   });
 
   return {
@@ -214,7 +190,6 @@ export function useLocations(
     locationBlocked,
     locationReady,
     isMultiLocation,
-    multiLocationEnabled,
     loading,
     loadError,
   };
