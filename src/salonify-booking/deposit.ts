@@ -234,15 +234,51 @@ export function parseBooleanFlag(value: unknown): boolean | undefined {
   return undefined;
 }
 
+/**
+ * Host #6 live once shipped `ttps://booking.salonify.co/...` (truncated https).
+ * Repair that before rejecting, so appointment-create still gets both URLs.
+ */
+export function coerceHttpUrlString(value: string): string {
+  const trimmed = value.trim();
+  if (/^ttps:\/\//i.test(trimmed)) return `h${trimmed}`;
+  return trimmed;
+}
+
 export function readHttpUrl(value: unknown): string | null {
   if (typeof value !== "string" || value.trim() === "") return null;
   try {
-    const url = new URL(value.trim());
+    const url = new URL(coerceHttpUrlString(value));
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
     return url.toString();
   } catch {
     return null;
   }
+}
+
+const ERROR_KEY_FIELDS = ["errorKey", "error", "code", "message"] as const;
+
+/**
+ * appointment-create failures may be FunctionsHttpError context JSON
+ * (`{code,message}` BOOT_ERROR), `{success:false,error}` in data, or errorKey.
+ */
+export function extractBookingErrorKey(
+  errorBody?: Record<string, unknown> | null,
+  data?: unknown,
+  error?: unknown
+): string | undefined {
+  const nestedData = asRecord(data);
+  const rows: Array<Record<string, unknown> | null> = [
+    errorBody ?? null,
+    nestedData,
+    asRecord(nestedData?.data),
+    asRecord(error),
+  ];
+  for (const row of rows) {
+    if (!row) continue;
+    const value = readString(...ERROR_KEY_FIELDS.map((field) => row[field]));
+    if (value) return value;
+  }
+  return undefined;
 }
 
 /** Stripe Checkout only — never open-redirect. */

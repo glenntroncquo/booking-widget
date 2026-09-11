@@ -3,11 +3,13 @@ import { describe, it } from "node:test";
 import {
   buildCheckoutReturnUrls,
   checkoutReturnBaseHref,
+  extractBookingErrorKey,
   followCheckoutUrl,
   isStripeCheckoutUrl,
   parseAppointmentCreateResult,
   parseCheckoutReturn,
   previewDepositHint,
+  readHttpUrl,
   resolveDepositReturnUrls,
   stripCheckoutReturnParams,
   sumSelectedDepositAmount,
@@ -150,11 +152,69 @@ describe("isStripeCheckoutUrl", () => {
   });
 });
 
+describe("readHttpUrl", () => {
+  it("repairs truncated https (ttps://) from the live host", () => {
+    assert.equal(
+      readHttpUrl("ttps://booking.salonify.co/glennie?deposit=success"),
+      "https://booking.salonify.co/glennie?deposit=success"
+    );
+  });
+
+  it("still rejects non-http schemes", () => {
+    assert.equal(readHttpUrl("javascript:alert(1)"), null);
+  });
+});
+
+describe("extractBookingErrorKey", () => {
+  it("reads DEPOSIT_URLS_REQUIRED from data when the body was not on error.context", () => {
+    assert.equal(
+      extractBookingErrorKey(undefined, {
+        success: false,
+        error: "DEPOSIT_URLS_REQUIRED",
+      }),
+      "DEPOSIT_URLS_REQUIRED"
+    );
+  });
+
+  it("reads BOOT_ERROR code from gateway JSON", () => {
+    assert.equal(
+      extractBookingErrorKey({
+        code: "BOOT_ERROR",
+        message: "Function failed to start (please check logs)",
+      }),
+      "BOOT_ERROR"
+    );
+  });
+
+  it("reads CHARGES_NOT_ENABLED from errorKey", () => {
+    assert.equal(
+      extractBookingErrorKey({ errorKey: "CHARGES_NOT_ENABLED" }),
+      "CHARGES_NOT_ENABLED"
+    );
+  });
+});
+
 describe("resolveDepositReturnUrls", () => {
   it("prefers host booking-path URLs", () => {
     const urls = resolveDepositReturnUrls({
       successUrl: "https://booking.salonify.co/glennie?deposit=success",
       cancelUrl: "https://booking.salonify.co/glennie?deposit=cancel",
+      fallbackHref: "https://widget.example/widget?companySlug=glennie",
+    });
+    assert.equal(
+      urls.success_url,
+      "https://booking.salonify.co/glennie?deposit=success"
+    );
+    assert.equal(
+      urls.cancel_url,
+      "https://booking.salonify.co/glennie?deposit=cancel"
+    );
+  });
+
+  it("repairs truncated host https so create still sends both booking-path URLs", () => {
+    const urls = resolveDepositReturnUrls({
+      successUrl: "ttps://booking.salonify.co/glennie?deposit=success",
+      cancelUrl: "ttps://booking.salonify.co/glennie?deposit=cancel",
       fallbackHref: "https://widget.example/widget?companySlug=glennie",
     });
     assert.equal(
