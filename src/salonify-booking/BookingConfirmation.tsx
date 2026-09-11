@@ -1,7 +1,7 @@
 import React from "react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Check, ArrowLeft, X, Loader2 } from "lucide-react";
+import { Check, ArrowLeft, X } from "lucide-react";
 import { Button } from "./components/button";
 import { cn, getImageUrl } from "./utils";
 import { formatEuro } from "./deposit";
@@ -104,19 +104,6 @@ export function BookingConfirmation({
                 <p className="text-sm text-gray-600">
                   Je afspraak is nog niet bevestigd. Betaal het voorschot om de
                   afspraak vast te leggen.
-                </p>
-              </>
-            ) : bookingData.depositPending ? (
-              <>
-                <div className="w-16 h-16 mx-auto mb-4 bg-salon-primary-light rounded-full flex items-center justify-center">
-                  <Loader2 className="h-8 w-8 text-salon-primary animate-spin" />
-                </div>
-                <h3 className="text-xl font-bold mb-2">
-                  Betaling wordt verwerkt
-                </h3>
-                <p className="text-sm text-gray-600">
-                  Even geduld — we bevestigen je afspraak zodra het voorschot
-                  is verwerkt. Dit scherm vernieuwt automatisch.
                 </p>
               </>
             ) : (
@@ -229,9 +216,7 @@ export function BookingConfirmation({
             >
               {bookingData.depositCanceled
                 ? "Opnieuw boeken"
-                : bookingData.depositPending
-                  ? "Terug naar boeken"
-                  : "Boek een nieuwe afspraak"}
+                : "Boek een nieuwe afspraak"}
             </Button>
           </div>
         </div>

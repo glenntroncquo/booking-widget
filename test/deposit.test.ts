@@ -16,10 +16,9 @@ import {
   stripCheckoutReturnParams,
   sumSelectedDepositAmount,
   usableStripeCheckoutUrl,
-  interpretHoldPromotion,
-  waitForHoldPromotion,
   isFreshDepositSnapshot,
   withCheckoutSessionPlaceholder,
+  bookingDataForCheckoutReturn,
 } from "../src/salonify-booking/deposit.ts";
 
 describe("parseCheckoutReturn", () => {
@@ -377,69 +376,38 @@ describe("parseCheckoutSessionId", () => {
   });
 });
 
-describe("interpretHoldPromotion", () => {
-  it("promotes on hold status completed", () => {
-    assert.deepEqual(interpretHoldPromotion({ status: "completed" }), {
-      promoted: true,
-      holdStatus: "completed",
-      appointmentId: null,
-    });
-  });
-
-  it("promotes when an appointment exists for the hold", () => {
-    assert.equal(
-      interpretHoldPromotion({
-        status: "hold_active",
-        appointment_id: "appt-1",
-      }).promoted,
-      true
-    );
-  });
-
-  it("does not promote an unpaid hold_active hold", () => {
-    assert.deepEqual(
-      interpretHoldPromotion({ id: "hold-1", status: "hold_active" }),
-      { promoted: false, holdStatus: "hold_active", appointmentId: null }
-    );
-  });
-
-  it("does not promote a missing row", () => {
-    assert.deepEqual(interpretHoldPromotion(null), {
-      promoted: false,
-      holdStatus: null,
-      appointmentId: null,
-    });
-  });
-});
-
-describe("waitForHoldPromotion", () => {
-  it("returns as soon as a poll is promoted", async () => {
-    let calls = 0;
-    const result = await waitForHoldPromotion(
-      async () => {
-        calls += 1;
-        return calls < 3
-          ? { promoted: false, holdStatus: "hold_active", appointmentId: null }
-          : { promoted: true, holdStatus: "completed", appointmentId: "appt-1" };
+describe("bookingDataForCheckoutReturn", () => {
+  it("treats Stripe success as paid immediately without a pending gate", () => {
+    const data = bookingDataForCheckoutReturn(
+      {
+        companyId: "c",
+        date: "",
+        timeSlot: "10:00",
+        staffName: "Glenn",
+        services: [{ serviceName: "Keratine", variantName: "Lang" }],
+        totalPrice: 220,
+        depositAmount: 25,
+        holdId: "hold-1",
       },
-      { delayMs: 1 }
+      { depositPaid: true }
     );
-    assert.equal(result.promoted, true);
-    assert.equal(result.appointmentId, "appt-1");
-    assert.equal(calls, 3);
+    assert.equal(data.depositPaid, true);
+    assert.equal(data.depositCanceled, undefined);
+    assert.equal(data.depositAmount, 25);
+    assert.equal(data.staffName, "Glenn");
   });
 
-  it("stays unpromoted after the short poll if the hold is still active", async () => {
-    const result = await waitForHoldPromotion(
-      async () => ({
-        promoted: false,
-        holdStatus: "hold_active",
-        appointmentId: null,
-      }),
-      { attempts: 3, delayMs: 1 }
-    );
-    assert.equal(result.promoted, false);
-    assert.equal(result.holdStatus, "hold_active");
+  it("keeps depositAmount typed as number | null when the snapshot is missing", () => {
+    const data = bookingDataForCheckoutReturn(null, { depositPaid: true });
+    assert.equal(data.depositPaid, true);
+    assert.equal(data.depositAmount, null);
+    assert.equal(data.depositCanceled, undefined);
+  });
+
+  it("keeps cancel as a soft fail, not success", () => {
+    const data = bookingDataForCheckoutReturn(null, { depositCanceled: true });
+    assert.equal(data.depositCanceled, true);
+    assert.equal(data.depositPaid, undefined);
   });
 });
 

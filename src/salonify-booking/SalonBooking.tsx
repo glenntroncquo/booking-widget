@@ -53,21 +53,17 @@ import {
   invokeServiceList,
   locationBody,
   normalizeServiceList,
-  fetchHoldPromotion,
 } from "./api";
 import {
-  bookingDataFromSnapshot,
+  bookingDataForCheckoutReturn,
   clearDepositBookingSnapshot,
-  emptyReturnBookingData,
   emitWidgetEvent,
   loadDepositBookingSnapshot,
   extractBookingErrorKey,
   followCheckoutUrl,
   parseAppointmentCreateResult,
   parseCheckoutReturn,
-  parseCheckoutSessionId,
   isFreshDepositSnapshot,
-  waitForHoldPromotion,
   resolveAppointmentCreateOutcome,
   resolveCheckoutHref,
   resolveDepositReturnUrls,
@@ -160,27 +156,11 @@ export function SalonBooking({
   useEffect(() => {
     if (checkoutReturnHandled.current) return;
     const status = parseCheckoutReturn(window.location.search);
-    const sessionId = parseCheckoutSessionId(window.location.search);
     const snapshot = loadDepositBookingSnapshot(companyId);
     const embedReturn = !status && isFreshDepositSnapshot(snapshot);
 
     if (!status && !embedReturn) return;
     checkoutReturnHandled.current = true;
-
-    const snapshotDepositAmount = snapshot?.depositAmount ?? null;
-    const returnBooking = (
-      extras: {
-        depositPaid?: boolean;
-        depositCanceled?: boolean;
-        depositPending?: boolean;
-      }
-    ) =>
-      snapshot
-        ? bookingDataFromSnapshot(snapshot, extras)
-        : emptyReturnBookingData({
-            ...extras,
-            depositAmount: snapshotDepositAmount,
-          });
 
     if (window.history.replaceState) {
       window.history.replaceState(
@@ -191,48 +171,28 @@ export function SalonBooking({
     }
 
     if (status === "cancel") {
-      setConfirmedBookingData(returnBooking({ depositCanceled: true }));
+      setConfirmedBookingData(
+        bookingDataForCheckoutReturn(snapshot, { depositCanceled: true })
+      );
       setShowConfirmation(true);
       emitWidgetEvent("deposit-cancel", { companyId });
       clearDepositBookingSnapshot();
       return;
     }
 
-    setConfirmedBookingData(returnBooking({ depositPending: true }));
+    // Glenn override: Stripe only redirects on successful payment. Do not
+    // wait, poll, or gate on hold/appointment/webhook status. Fake success
+    // UI here is fine; appointment insert stays webhook-owned.
+    setConfirmedBookingData(
+      bookingDataForCheckoutReturn(snapshot, { depositPaid: true })
+    );
     setShowConfirmation(true);
-    emitWidgetEvent("deposit-pending", {
+    emitWidgetEvent("deposit-success", {
       companyId,
-      holdId: snapshot?.holdId ?? null,
-      sessionId: sessionId ?? snapshot?.sessionId ?? null,
+      depositAmount: snapshot?.depositAmount ?? null,
     });
-
-    let cancelled = false;
-    void (async () => {
-      const promoted = await waitForHoldPromotion(() =>
-        fetchHoldPromotion(supabase, {
-          holdId: snapshot?.holdId ?? null,
-          sessionId: sessionId ?? snapshot?.sessionId ?? null,
-        })
-      );
-      if (cancelled) return;
-      if (promoted.promoted) {
-        setConfirmedBookingData(
-          returnBooking({ depositPaid: true, depositPending: false })
-        );
-        emitWidgetEvent("deposit-success", {
-          companyId,
-          depositAmount: snapshot?.depositAmount ?? null,
-          holdId: snapshot?.holdId ?? null,
-          appointmentId: promoted.appointmentId,
-        });
-        clearDepositBookingSnapshot();
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [companyId, supabase]);
+    clearDepositBookingSnapshot();
+  }, [companyId]);
 
   const isValidEmail = (emailValue: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1021,8 +981,7 @@ export function SalonBooking({
     if (
       showConfirmation &&
       confirmedBookingData &&
-      !confirmedBookingData.depositCanceled &&
-      !confirmedBookingData.depositPending
+      !confirmedBookingData.depositCanceled
     ) {
       const timer1 = setTimeout(() => {
         confetti({
