@@ -8,6 +8,7 @@ import {
   isStripeCheckoutUrl,
   parseAppointmentCreateResult,
   parseCheckoutReturn,
+  parseCheckoutSessionId,
   resolveAppointmentCreateOutcome,
   previewDepositHint,
   readHttpUrl,
@@ -15,6 +16,10 @@ import {
   stripCheckoutReturnParams,
   sumSelectedDepositAmount,
   usableStripeCheckoutUrl,
+  interpretHoldPromotion,
+  waitForHoldPromotion,
+  isFreshDepositSnapshot,
+  withCheckoutSessionPlaceholder,
 } from "../src/salonify-booking/deposit.ts";
 
 describe("parseCheckoutReturn", () => {
@@ -125,6 +130,7 @@ describe("parseAppointmentCreateResult", () => {
     assert.equal(result.holdId, "hold-1");
     assert.equal(result.status, "hold_active");
     assert.equal(result.bookingId, null);
+    assert.equal(result.sessionId, "cs_test");
   });
 });
 
@@ -262,7 +268,7 @@ describe("resolveDepositReturnUrls", () => {
     });
     assert.equal(
       urls.success_url,
-      "https://booking.salonify.co/glennie?deposit=success"
+      "https://booking.salonify.co/glennie?deposit=success&session_id={CHECKOUT_SESSION_ID}"
     );
     assert.equal(
       urls.cancel_url,
@@ -278,7 +284,7 @@ describe("resolveDepositReturnUrls", () => {
     });
     assert.equal(
       urls.success_url,
-      "https://booking.salonify.co/glennie?deposit=success"
+      "https://booking.salonify.co/glennie?deposit=success&session_id={CHECKOUT_SESSION_ID}"
     );
     assert.equal(
       urls.cancel_url,
@@ -348,5 +354,131 @@ describe("previewDepositHint", () => {
     const hint = previewDepositHint(25, 10, false);
     assert.equal(hint.amount, null);
     assert.equal(hint.showCta, false);
+  });
+});
+
+describe("parseCheckoutSessionId", () => {
+  it("reads Stripe session_id", () => {
+    assert.equal(
+      parseCheckoutSessionId("?deposit=success&session_id=cs_test_123"),
+      "cs_test_123"
+    );
+  });
+
+  it("ignores the unsubstituted Checkout placeholder", () => {
+    assert.equal(
+      parseCheckoutSessionId("?session_id={CHECKOUT_SESSION_ID}"),
+      null
+    );
+    assert.equal(
+      parseCheckoutReturn("?session_id={CHECKOUT_SESSION_ID}"),
+      null
+    );
+  });
+});
+
+describe("interpretHoldPromotion", () => {
+  it("promotes on hold status completed", () => {
+    assert.deepEqual(interpretHoldPromotion({ status: "completed" }), {
+      promoted: true,
+      holdStatus: "completed",
+      appointmentId: null,
+    });
+  });
+
+  it("promotes when an appointment exists for the hold", () => {
+    assert.equal(
+      interpretHoldPromotion({
+        status: "hold_active",
+        appointment_id: "appt-1",
+      }).promoted,
+      true
+    );
+  });
+
+  it("does not promote an unpaid hold_active hold", () => {
+    assert.deepEqual(
+      interpretHoldPromotion({ id: "hold-1", status: "hold_active" }),
+      { promoted: false, holdStatus: "hold_active", appointmentId: null }
+    );
+  });
+
+  it("does not promote a missing row", () => {
+    assert.deepEqual(interpretHoldPromotion(null), {
+      promoted: false,
+      holdStatus: null,
+      appointmentId: null,
+    });
+  });
+});
+
+describe("waitForHoldPromotion", () => {
+  it("returns as soon as a poll is promoted", async () => {
+    let calls = 0;
+    const result = await waitForHoldPromotion(
+      async () => {
+        calls += 1;
+        return calls < 3
+          ? { promoted: false, holdStatus: "hold_active", appointmentId: null }
+          : { promoted: true, holdStatus: "completed", appointmentId: "appt-1" };
+      },
+      { delayMs: 1 }
+    );
+    assert.equal(result.promoted, true);
+    assert.equal(result.appointmentId, "appt-1");
+    assert.equal(calls, 3);
+  });
+
+  it("stays unpromoted after the short poll if the hold is still active", async () => {
+    const result = await waitForHoldPromotion(
+      async () => ({
+        promoted: false,
+        holdStatus: "hold_active",
+        appointmentId: null,
+      }),
+      { attempts: 3, delayMs: 1 }
+    );
+    assert.equal(result.promoted, false);
+    assert.equal(result.holdStatus, "hold_active");
+  });
+});
+
+describe("isFreshDepositSnapshot", () => {
+  it("requires a hold or session on the snapshot", () => {
+    assert.equal(
+      isFreshDepositSnapshot({
+        companyId: "c",
+        date: "",
+        timeSlot: "",
+        staffName: "",
+        services: [],
+        totalPrice: 0,
+        depositAmount: 25,
+      }),
+      false
+    );
+    assert.equal(
+      isFreshDepositSnapshot({
+        companyId: "c",
+        date: "",
+        timeSlot: "",
+        staffName: "",
+        services: [],
+        totalPrice: 0,
+        depositAmount: 25,
+        holdId: "hold-1",
+        savedAt: Date.now(),
+      }),
+      true
+    );
+  });
+});
+
+describe("withCheckoutSessionPlaceholder", () => {
+  it("appends the Stripe placeholder without encoding braces", () => {
+    const url = withCheckoutSessionPlaceholder(
+      "https://booking.salonify.co/glennie?deposit=success"
+    );
+    assert.match(url, /session_id=\{CHECKOUT_SESSION_ID\}$/);
   });
 });
