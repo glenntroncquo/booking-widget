@@ -1,5 +1,6 @@
 import { Button } from "./components/button";
 import { calculateTotalPriceRange } from "./utils";
+import { formatEuro, sumSelectedDepositAmount } from "./deposit";
 
 import { SelectedService } from "./types/types";
 
@@ -35,6 +36,9 @@ export function BookingFooter({
           : priceRange.baseTotal;
 
   const hasNoServices = selectedServices.length === 0;
+  const depositAmount = sumSelectedDepositAmount(selectedServices);
+  const submitLabel =
+    depositAmount != null ? "Betaal voorschot" : "Afspraak maken";
 
   if (isMobile) {
     return (
@@ -60,6 +64,11 @@ export function BookingFooter({
               <span className="font-bold text-lg">
                 {totalDisplay ? `€${totalDisplay}` : ""}
               </span>
+              {depositAmount != null ? (
+                <span className="text-xs text-gray-500">
+                  Voorschot €{formatEuro(depositAmount)}
+                </span>
+              ) : null}
             </div>
 
             {currentStep > 1 ? (
@@ -85,7 +94,7 @@ export function BookingFooter({
                     disabled={submitting}
                     className="bg-salon-primary hover:bg-salon-primary-hover text-white px-5 py-2 h-auto"
                   >
-                    {submitting ? "Bezig..." : "Afspraak maken"}
+                    {submitting ? "Bezig..." : submitLabel}
                   </Button>
                 )}
               </div>
@@ -119,8 +128,15 @@ export function BookingFooter({
         </div>
       ) : (
         <>
-          <div className="font-bold">
-            Totaal: {totalDisplay ? `€${totalDisplay}` : ""}
+          <div>
+            <div className="font-bold">
+              Totaal: {totalDisplay ? `€${totalDisplay}` : ""}
+            </div>
+            {depositAmount != null ? (
+              <div className="text-xs text-gray-500">
+                Voorschot €{formatEuro(depositAmount)}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex gap-2">
@@ -149,7 +165,7 @@ export function BookingFooter({
                 disabled={submitting}
                 className="bg-salon-primary hover:bg-salon-primary-hover text-white px-5 py-2 h-auto"
               >
-                {submitting ? "Bezig..." : "Afspraak maken"}
+                {submitting ? "Bezig..." : submitLabel}
               </Button>
             )}
           </div>

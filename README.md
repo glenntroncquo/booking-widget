@@ -71,6 +71,8 @@ iframe a sensible height for the space it occupies.
 
 Supabase URL and anon key come from the widget environment (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`), not from the iframe query string.
 
+Company is always required via query (or the equivalent React prop). The widget does not add public RPCs for deposits.
+
 ### Optional Parameters
 
 - `locationId` - Pin a location UUID. Wins over `locationSlug`. When set, services/staff/availability load for that location.
@@ -85,6 +87,24 @@ Supabase URL and anon key come from the widget environment (`VITE_SUPABASE_URL`,
 - `background` - Background color (hex code)
 - `maxDate` - Maximum booking date (ISO string, e.g., `2024-12-31`)
 - `showStaff` - Show staff selection (`true` or `false`, default: `true`)
+
+### Booking deposits (Stripe Checkout)
+
+When the public `appointment-create` response includes `checkout_url`, the widget opens Stripe Checkout (top-level navigation so Checkout is not framed). A deposit amount is shown when `service-list` or the create response includes it (`deposit_amount` / `depositAmount`).
+
+Stripe return lands back on the same widget URL, with company still in the query:
+
+```
+https://your-domain.com/widget?companySlug=glennie&deposit=success
+https://your-domain.com/widget?companySlug=glennie&deposit=cancel
+```
+
+| Return | Widget |
+|---|---|
+| `deposit=success` | Confirmation: voorschot paid |
+| `deposit=cancel` | Cancelled payment; appointment is not treated as confirmed |
+
+Create still uses `appointment-create` only. Optional `successUrl` / `cancelUrl` (and snake_case) are sent on that existing body so Checkout can return here. No new public RPCs.
 
 ### Multi-location embed URLs
 
@@ -242,6 +262,7 @@ window.addEventListener("message", (event) => {
   if (event.data.type === "salonify-booking-event") {
     console.log("Event:", event.data.event);
     console.log("Data:", event.data.data);
+    // booking-created | deposit-checkout | deposit-success | deposit-cancel
   }
 });
 ```

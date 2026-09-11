@@ -6,6 +6,7 @@ import { Label } from "./components/label";
 import { Input } from "./components/input";
 import { Textarea } from "./components/textarea";
 import { cn, calculateTotalPriceRange, getImageUrl } from "./utils";
+import { formatEuro, sumSelectedDepositAmount } from "./deposit";
 import {
   SelectedService,
   Availabilities,
@@ -220,6 +221,18 @@ export function CustomerDetails({
               })()}
             </span>
           </div>
+          {(() => {
+            const depositAmount = sumSelectedDepositAmount(selectedServices);
+            if (depositAmount == null) return null;
+            return (
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-sm text-gray-600">Voorschot nu</span>
+                <span className="text-sm font-medium text-gray-700">
+                  € {formatEuro(depositAmount)}
+                </span>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

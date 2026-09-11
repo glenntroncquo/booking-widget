@@ -124,6 +124,8 @@ export interface ServiceVariant {
   phases?: ServiceVariantPhase[];
   /** Variant-level staff eligibility override (from staff_service_variant). */
   staff_ids?: string[];
+  /** Deposit due at booking, when the catalog includes it. */
+  deposit_amount?: number | null;
 }
 
 export interface Service {
@@ -134,6 +136,8 @@ export interface Service {
   service_variant: ServiceVariant[];
   /** Service-level staff eligibility (from staff_service). */
   staff_ids?: string[];
+  /** Company/service deposit, when the catalog includes it. */
+  deposit_amount?: number | null;
 }
 
 export interface SelectedService {
@@ -151,7 +155,7 @@ export interface StaffOption {
 }
 
 export interface BookingData {
-  date: Date;
+  date: Date | null;
   timeSlot: string;
   staffName: string;
   services: SelectedService[];
@@ -159,6 +163,9 @@ export interface BookingData {
   referralApplied?: boolean;
   locationName?: string;
   locationAddress?: string;
+  depositAmount?: number | null;
+  depositPaid?: boolean;
+  depositCanceled?: boolean;
 }
 
 export const defaultTheme: SalonTheme = {

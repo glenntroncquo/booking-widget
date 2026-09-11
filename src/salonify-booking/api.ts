@@ -124,6 +124,9 @@ function normalizeVariant(raw: unknown): ServiceVariant | null {
     display_order: asNumber(row.display_order ?? row.order),
     phases,
     staff_ids: asStringArray(row.staff_ids),
+    deposit_amount: asNullableNumber(
+      row.deposit_amount ?? row.depositAmount
+    ),
   };
 }
 
@@ -148,6 +151,9 @@ export function normalizeServiceList(data: unknown): Service[] {
           .map(normalizeVariant)
           .filter((variant): variant is ServiceVariant => variant !== null),
         staff_ids: asStringArray(row.staff_ids),
+        deposit_amount: asNullableNumber(
+          row.deposit_amount ?? row.depositAmount
+        ),
       };
     })
     .filter((service): service is Service => service !== null);
@@ -201,6 +207,10 @@ export async function invokeAppointmentCreate(
     referralCode?: string;
     location_id?: string;
     locationId?: string;
+    successUrl?: string;
+    cancelUrl?: string;
+    success_url?: string;
+    cancel_url?: string;
   }
 ) {
   return supabase.functions.invoke("appointment-create", { body });
