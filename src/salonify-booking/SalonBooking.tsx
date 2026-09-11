@@ -54,6 +54,22 @@ import {
   locationBody,
   normalizeServiceList,
 } from "./api";
+import {
+  bookingDataFromSnapshot,
+  clearDepositBookingSnapshot,
+  emptyReturnBookingData,
+  emitWidgetEvent,
+  loadDepositBookingSnapshot,
+  followCheckoutUrl,
+  parseAppointmentCreateResult,
+  parseCheckoutReturn,
+  resolveCheckoutHref,
+  resolveDepositReturnUrls,
+  saveDepositBookingSnapshot,
+  stripCheckoutReturnParams,
+  sumSelectedDepositAmount,
+  coalesceDepositAmount,
+} from "./deposit";
 
 export function SalonBooking({
   companyId,
@@ -65,6 +81,10 @@ export function SalonBooking({
   initialStaffSlugs = [],
   locationId: pinnedLocationId,
   locationSlug: pinnedLocationSlug,
+  successUrl: hostSuccessUrl,
+  cancelUrl: hostCancelUrl,
+  depositAmount: hostDepositAmount,
+  depositEnabled: hostDepositEnabled,
 }: SalonBookingProps) {
   const supabase = useMemo(() => {
     return createClient(supabaseConfig.url, supabaseConfig.anonKey);
@@ -118,6 +138,7 @@ export function SalonBooking({
   const [emailSubmitting, setEmailSubmitting] = useState(false);
   const [emailSuccess, setEmailSuccess] = useState(false);
   const [emailError, setEmailError] = useState("");
+  const checkoutReturnHandled = useRef(false);
 
   const handleCloseEmailInput = () => {
     setEmailInputClosing(true);
@@ -129,6 +150,45 @@ export function SalonBooking({
       setEmail("");
     }, 300);
   };
+
+  useEffect(() => {
+    if (checkoutReturnHandled.current) return;
+    const status = parseCheckoutReturn(window.location.search);
+    if (!status) return;
+    checkoutReturnHandled.current = true;
+
+    const snapshot = loadDepositBookingSnapshot(companyId);
+    if (status === "success") {
+      setConfirmedBookingData(
+        snapshot
+          ? bookingDataFromSnapshot(snapshot, { depositPaid: true })
+          : emptyReturnBookingData({ depositPaid: true })
+      );
+      setShowConfirmation(true);
+      emitWidgetEvent("deposit-success", {
+        companyId,
+        depositAmount: snapshot?.depositAmount ?? null,
+      });
+      clearDepositBookingSnapshot();
+    } else {
+      setConfirmedBookingData(
+        snapshot
+          ? bookingDataFromSnapshot(snapshot, { depositCanceled: true })
+          : emptyReturnBookingData({ depositCanceled: true })
+      );
+      setShowConfirmation(true);
+      toast.message("Betaling geannuleerd. Je afspraak is nog niet bevestigd.");
+      emitWidgetEvent("deposit-cancel", { companyId });
+    }
+
+    if (window.history.replaceState) {
+      window.history.replaceState(
+        {},
+        document.title,
+        stripCheckoutReturnParams(window.location.href)
+      );
+    }
+  }, [companyId]);
 
   const isValidEmail = (emailValue: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -627,6 +687,10 @@ export function SalonBooking({
           return "Het ging net mis door drukte. Probeer het nog eens.";
         case "BOOKING_FAILED":
           return "Boeken is niet gelukt. Probeer het opnieuw.";
+        case "DEPOSIT_URLS_REQUIRED":
+          return "Betaling kan niet worden gestart. Probeer het opnieuw vanuit de boekingspagina.";
+        case "CHARGES_NOT_ENABLED":
+          return "Online betalen is nog niet actief voor deze zaak. Neem contact op om te boeken.";
         default:
           break;
       }
@@ -742,6 +806,11 @@ export function SalonBooking({
       );
 
       const referralCodeTrimmed = bookingState.referralCode.trim();
+      const { success_url, cancel_url } = resolveDepositReturnUrls({
+        successUrl: hostSuccessUrl,
+        cancelUrl: hostCancelUrl,
+        fallbackHref: resolveCheckoutHref(),
+      });
 
       const response = await invokeAppointmentCreate(supabase, {
         start,
@@ -761,6 +830,8 @@ export function SalonBooking({
         ...(referralCodeTrimmed.length > 0
           ? { referralCode: referralCodeTrimmed }
           : {}),
+        success_url,
+        cancel_url,
       });
 
       const hasReferralCode = referralCodeTrimmed.length > 0;
@@ -792,6 +863,16 @@ export function SalonBooking({
         return;
       }
 
+      const createResult = parseAppointmentCreateResult(response.data);
+      const catalogDeposit = sumSelectedDepositAmount(
+        bookingState.selectedServices
+      );
+      const depositAmount = coalesceDepositAmount(
+        createResult.depositAmount,
+        catalogDeposit,
+        hostDepositAmount
+      );
+
       const staffName = (() => {
         const ids = uniqueStaffIds(bookingState.selectedServices);
         const names = ids
@@ -815,6 +896,37 @@ export function SalonBooking({
         return names.join(" · ");
       })();
 
+      const bookingSnapshot = {
+        companyId,
+        date: bookingState.selectedDay.toISOString(),
+        timeSlot: bookingState.selectedTimeSlot,
+        staffName,
+        services: bookingState.selectedServices.map((item) => ({
+          serviceName: item.service.name,
+          variantName: item.variant.name,
+        })),
+        totalPrice: calculateTotalPrice(bookingState.selectedServices),
+        depositAmount,
+        referralApplied: referralCodeTrimmed.length > 0,
+        locationName: locationState.selectedLocation?.name,
+        locationAddress: locationState.selectedLocation
+          ? formatLocationAddress(locationState.selectedLocation) || undefined
+          : undefined,
+      };
+
+      if (createResult.checkoutUrl) {
+        saveDepositBookingSnapshot(bookingSnapshot);
+        if (!followCheckoutUrl(createResult.checkoutUrl)) {
+          clearDepositBookingSnapshot();
+          toast.error(
+            "Betaling kon niet worden geopend. Probeer het opnieuw."
+          );
+          return;
+        }
+        toast.success("Je wordt doorgestuurd naar de betaling…");
+        return;
+      }
+
       setConfirmedBookingData({
         date: bookingState.selectedDay,
         timeSlot: bookingState.selectedTimeSlot,
@@ -826,8 +938,10 @@ export function SalonBooking({
         locationAddress: locationState.selectedLocation
           ? formatLocationAddress(locationState.selectedLocation) || undefined
           : undefined,
+        depositAmount,
       });
 
+      emitWidgetEvent("booking-created", { companyId, depositAmount });
       toast.success(
         "Afspraak succesvol ingepland! Wij hebben een bevestiging naar uw e-mailadres gestuurd."
       );
@@ -850,7 +964,11 @@ export function SalonBooking({
   };
 
   useEffect(() => {
-    if (showConfirmation && confirmedBookingData) {
+    if (
+      showConfirmation &&
+      confirmedBookingData &&
+      !confirmedBookingData.depositCanceled
+    ) {
       const timer1 = setTimeout(() => {
         confetti({
           particleCount: 100,
@@ -915,6 +1033,7 @@ export function SalonBooking({
             bookingState.resetToStep1();
             setShowConfirmation(false);
             setConfirmedBookingData(null);
+            clearDepositBookingSnapshot();
           }}
         />
       </>
@@ -1160,6 +1279,8 @@ export function SalonBooking({
                 imageUploading={imageUpload.imageUploading}
                 theme={theme}
                 supabase={supabase}
+                hostDepositAmount={hostDepositAmount}
+                hostDepositEnabled={hostDepositEnabled}
                 onFirstNameChange={bookingState.setFirstName}
                 onLastNameChange={bookingState.setLastName}
                 onEmailChange={bookingState.setEmail}
@@ -1182,6 +1303,8 @@ export function SalonBooking({
           currentStep={bookingState.currentStep}
           selectedServices={bookingState.selectedServices}
           submitting={bookingState.submitting}
+          hostDepositAmount={hostDepositAmount}
+          hostDepositEnabled={hostDepositEnabled}
           onPreviousStep={bookingState.handlePreviousStep}
           onNextStep={bookingState.handleNextStep}
           onSubmit={handleSubmit}

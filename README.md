@@ -71,6 +71,8 @@ iframe a sensible height for the space it occupies.
 
 Supabase URL and anon key come from the widget environment (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`), not from the iframe query string.
 
+Company is always required via query (or the equivalent React prop). The widget does not add public RPCs for deposits. `companySlug` is resolved with a `company` table SELECT, then the existing `company-get` edge if that SELECT is empty.
+
 ### Optional Parameters
 
 - `locationId` - Pin a location UUID. Wins over `locationSlug`. When set, services/staff/availability load for that location.
@@ -85,6 +87,45 @@ Supabase URL and anon key come from the widget environment (`VITE_SUPABASE_URL`,
 - `background` - Background color (hex code)
 - `maxDate` - Maximum booking date (ISO string, e.g., `2024-12-31`)
 - `showStaff` - Show staff selection (`true` or `false`, default: `true`)
+- `successUrl` / `success_url` - Host booking-path return URL after Stripe (preferred on deposit book)
+- `cancelUrl` / `cancel_url` - Host booking-path cancel URL after Stripe
+- `depositAmount` / `deposit_amount` - Optional host hint (from `company-get` when present)
+- `depositEnabled` / `deposit_enabled` - Optional host hint; shows **Betaal voorschot** on the book step
+
+`widget-config` postMessage can send the same keys.
+
+### Booking deposits (Stripe Checkout)
+
+Live `appointment-create` (v24) returns `checkout_url` + `deposit_amount` when a deposit is required. The public widget **only** uses that function. `payment-create-checkout` stays a staff XOR path and is not called here.
+
+On book, the widget always sends snake_case `success_url` and `cancel_url`. Prefer host URLs from the iframe query or `widget-config` (booking-path URLs such as `https://booking.salonify.co/glennie?deposit=success`). If those are missing, the widget builds fallbacks from its own URL. Missing URLs → backend `DEPOSIT_URLS_REQUIRED`. Connect not ready → `CHARGES_NOT_ENABLED`.
+
+When `checkout_url` is present:
+
+1. Only `https://checkout.stripe.com` is followed (no open redirect).
+2. In an iframe the widget postMessages the host (booking#6), then tries top navigation. Checkout is never loaded inside the nested iframe.
+3. Standalone widget URLs redirect this window.
+
+Host postMessage (so the top window can leave for Stripe when `window.top.location` is cross-origin blocked):
+
+```javascript
+{ type: "salonify-checkout", checkout_url, checkoutUrl }
+{ type: "salonify-booking-event", event: "checkout", data: { checkout_url, checkoutUrl } }
+```
+
+Hosts should only follow `https://checkout.stripe.com`. Stripe return lands on the **host** path (`?deposit=success|cancel`). The widget’s own return screens are for standalone widget URLs.
+
+```
+https://booking.salonify.co/glennie?deposit=success
+https://booking.salonify.co/glennie?deposit=cancel
+https://your-domain.com/widget?companySlug=glennie&deposit=success
+https://your-domain.com/widget?companySlug=glennie&deposit=cancel
+```
+
+| Return | Widget |
+|---|---|
+| `deposit=success` (or `session_id`) | Confirmation: voorschot paid |
+| `deposit=cancel` | Cancelled payment; appointment is not treated as confirmed |
 
 ### Multi-location embed URLs
 
@@ -231,6 +272,8 @@ iframe.contentWindow.postMessage({
     showStaff: true,
     locationId: "LOCATION_UUID",
     maxDate: new Date("2024-12-31"),
+    successUrl: "https://booking.salonify.co/glennie?deposit=success",
+    cancelUrl: "https://booking.salonify.co/glennie?deposit=cancel",
   }
 }, "*");
 ```
@@ -239,9 +282,15 @@ iframe.contentWindow.postMessage({
 
 ```javascript
 window.addEventListener("message", (event) => {
+  if (event.data.type === "salonify-checkout") {
+    // Host must only follow https://checkout.stripe.com
+    window.location.assign(event.data.checkout_url);
+    return;
+  }
   if (event.data.type === "salonify-booking-event") {
     console.log("Event:", event.data.event);
     console.log("Data:", event.data.data);
+    // checkout | booking-created | deposit-success | deposit-cancel
   }
 });
 ```

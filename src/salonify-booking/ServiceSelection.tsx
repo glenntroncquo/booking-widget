@@ -7,6 +7,7 @@ import {
 } from "./components/accordion";
 import { Badge } from "./components/badge";
 import { cn, getImageUrl, variantClientDurationMinutes } from "./utils";
+import { formatEuro, readCatalogDepositAmount } from "./deposit";
 import {
   Service,
   ServiceVariant,
@@ -139,20 +140,34 @@ export function ServiceSelection({
                               </div>
                             </div>
                           </div>
-                          <div className="font-bold">
-                            {variant.price < 0 ? (
-                              <span></span>
-                            ) : variant.max_price &&
-                              variant.max_price !== variant.price ? (
-                              <span>
-                                €{variant.price} -{" "}
-                                {variant.max_price >= 9999
-                                  ? "..."
-                                  : `€${variant.max_price}`}
-                              </span>
-                            ) : (
-                              <span>€{variant.price}</span>
-                            )}
+                          <div className="text-right">
+                            <div className="font-bold">
+                              {variant.price < 0 ? (
+                                <span></span>
+                              ) : variant.max_price &&
+                                variant.max_price !== variant.price ? (
+                                <span>
+                                  €{variant.price} -{" "}
+                                  {variant.max_price >= 9999
+                                    ? "..."
+                                    : `€${variant.max_price}`}
+                                </span>
+                              ) : (
+                                <span>€{variant.price}</span>
+                              )}
+                            </div>
+                            {(() => {
+                              const deposit = readCatalogDepositAmount({
+                                variant,
+                                service,
+                              });
+                              if (deposit == null) return null;
+                              return (
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  Voorschot €{formatEuro(deposit)}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       );

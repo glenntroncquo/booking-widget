@@ -124,6 +124,9 @@ function normalizeVariant(raw: unknown): ServiceVariant | null {
     display_order: asNumber(row.display_order ?? row.order),
     phases,
     staff_ids: asStringArray(row.staff_ids),
+    deposit_amount: asNullableNumber(
+      row.deposit_amount ?? row.depositAmount
+    ),
   };
 }
 
@@ -148,6 +151,9 @@ export function normalizeServiceList(data: unknown): Service[] {
           .map(normalizeVariant)
           .filter((variant): variant is ServiceVariant => variant !== null),
         staff_ids: asStringArray(row.staff_ids),
+        deposit_amount: asNullableNumber(
+          row.deposit_amount ?? row.depositAmount
+        ),
       };
     })
     .filter((service): service is Service => service !== null);
@@ -167,6 +173,36 @@ export async function invokeStaffList(
   return supabase.functions.invoke("staff-list", { body });
 }
 
+/** Resolve a public company slug. Table SELECT first; existing company-get if RLS hides it. */
+export async function resolveCompanyIdBySlug(
+  supabase: SupabaseClient,
+  slug: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("company")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!error && data && typeof data.id === "string") {
+    return data.id;
+  }
+
+  const invoked = await supabase.functions.invoke("company-get", {
+    body: { slug },
+  });
+  if (invoked.error) {
+    console.warn(
+      "[Salonify Widget] company-get failed to resolve slug:",
+      invoked.error.message
+    );
+    return null;
+  }
+  const root = asRecord(invoked.data);
+  if (!root) return null;
+  const nested = asRecord(root.data) ?? asRecord(root.company) ?? root;
+  return typeof nested.id === "string" ? nested.id : null;
+}
+
 export async function invokeAvailabilityList(
   supabase: SupabaseClient,
   body: {
@@ -182,6 +218,11 @@ export async function invokeAvailabilityList(
   return supabase.functions.invoke("availability-list", { body });
 }
 
+/**
+ * Public widget booking. Uses appointment-create only.
+ * Do not invoke payment-create-checkout from here — that path is staff XOR.
+ * Live v24 returns checkout_url + deposit_amount and requires success_url + cancel_url.
+ */
 export async function invokeAppointmentCreate(
   supabase: SupabaseClient,
   body: {
@@ -201,6 +242,10 @@ export async function invokeAppointmentCreate(
     referralCode?: string;
     location_id?: string;
     locationId?: string;
+    successUrl?: string;
+    cancelUrl?: string;
+    success_url?: string;
+    cancel_url?: string;
   }
 ) {
   return supabase.functions.invoke("appointment-create", { body });
