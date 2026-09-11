@@ -8,6 +8,7 @@ import {
   parsePositiveNumber,
   readHttpUrl,
 } from "./salonify-booking/deposit";
+import { classifyWidgetBoot } from "./salonify-booking/widgetBoot";
 
 // Define SalonTheme locally (not exported from package)
 interface SalonTheme {
@@ -56,6 +57,7 @@ interface ErrorState {
 function App() {
   const [config, setConfig] = useState<WidgetConfig | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
+  const [missingCompany, setMissingCompany] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const displayMode = useMemo(() => {
@@ -79,11 +81,6 @@ function App() {
     const locationSlug = params.get("locationSlug");
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
     const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-
-    // Required: companyId OR companySlug from URL; supabaseUrl and supabaseKey from env
-    if ((!companyId && !companySlug) || !supabaseUrl || !supabaseKey) {
-      return null;
-    }
 
     // Optional theme parameters: only collect keys explicitly present in the URL
     // so company_integrations styles can layer underneath them.
@@ -166,12 +163,27 @@ function App() {
     console.log("[Salonify Widget] Initializing...");
     console.log("[Salonify Widget] URL params:", window.location.search);
     
-    if (!parseUrlParams) {
-      console.error("[Salonify Widget] Missing required parameters");
+    const boot = classifyWidgetBoot({
+      companyId: parseUrlParams.companyId,
+      companySlug: parseUrlParams.companySlug,
+      supabaseUrl: parseUrlParams.supabaseUrl,
+      supabaseKey: parseUrlParams.supabaseKey,
+    });
+
+    if (boot === "missing-company") {
+      setMissingCompany(true);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    if (boot === "missing-env") {
+      console.error("[Salonify Widget] Missing Supabase environment");
+      setMissingCompany(false);
       setError({
-        title: "Missing Required Parameters",
+        title: "Missing Configuration",
         message:
-          "Please provide companyId or companySlug as a URL parameter, and configure Supabase via environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).",
+          "Configure Supabase via environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).",
       });
       setLoading(false);
       return;
@@ -242,6 +254,7 @@ function App() {
       if (cancelled) return;
 
       if (!companyId) {
+        setMissingCompany(false);
         setError({
           title: "Company Not Found",
           message:
@@ -270,6 +283,7 @@ function App() {
         depositAmount,
         depositEnabled,
       });
+      setMissingCompany(false);
       setError(null);
       setLoading(false);
       console.log("[Salonify Widget] Configuration set successfully");
@@ -386,6 +400,26 @@ function App() {
     return (
       <div className="loading-container">
         <div className="loading-spinner" />
+      </div>
+    );
+  }
+
+  // Soft landing: bare widget root without companyId / companySlug
+  if (missingCompany) {
+    return (
+      <div className="widget-container">
+        <div className="help-container">
+          <div className="help-header">
+            <h2>Boek een afspraak</h2>
+          </div>
+          <div className="help-body">
+            <p className="help-title">Geen zaak geselecteerd</p>
+            <p className="help-message">
+              Open de boekingslink van je salon om verder te gaan. Embeds hebben
+              companySlug of companyId nodig.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }

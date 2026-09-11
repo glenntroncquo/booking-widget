@@ -71,7 +71,7 @@ iframe a sensible height for the space it occupies.
 
 Supabase URL and anon key come from the widget environment (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`), not from the iframe query string.
 
-Company is always required via query (or the equivalent React prop). The widget does not add public RPCs for deposits. `companySlug` is resolved with a `company` table SELECT, then the existing `company-get` edge if that SELECT is empty.
+Company is always required via query (or the equivalent React prop) to start a booking. A bare `/` or `/widget` without `companyId` / `companySlug` shows a friendly help state (not a hard error). The widget does not add public RPCs for deposits. `companySlug` is resolved with a `company` table SELECT, then the existing `company-get` edge if that SELECT is empty.
 
 ### Optional Parameters
 
