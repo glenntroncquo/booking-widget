@@ -53,6 +53,7 @@ import {
   invokeServiceList,
   locationBody,
   normalizeServiceList,
+  fetchHoldPromotion,
 } from "./api";
 import {
   bookingDataFromSnapshot,
@@ -64,6 +65,9 @@ import {
   followCheckoutUrl,
   parseAppointmentCreateResult,
   parseCheckoutReturn,
+  parseCheckoutSessionId,
+  isFreshDepositSnapshot,
+  waitForHoldPromotion,
   resolveAppointmentCreateOutcome,
   resolveCheckoutHref,
   resolveDepositReturnUrls,
@@ -156,32 +160,26 @@ export function SalonBooking({
   useEffect(() => {
     if (checkoutReturnHandled.current) return;
     const status = parseCheckoutReturn(window.location.search);
-    if (!status) return;
+    const sessionId = parseCheckoutSessionId(window.location.search);
+    const snapshot = loadDepositBookingSnapshot(companyId);
+    const embedReturn = !status && isFreshDepositSnapshot(snapshot);
+
+    if (!status && !embedReturn) return;
     checkoutReturnHandled.current = true;
 
-    const snapshot = loadDepositBookingSnapshot(companyId);
-    if (status === "success") {
-      setConfirmedBookingData(
-        snapshot
-          ? bookingDataFromSnapshot(snapshot, { depositPaid: true })
-          : emptyReturnBookingData({ depositPaid: true })
-      );
-      setShowConfirmation(true);
-      emitWidgetEvent("deposit-success", {
-        companyId,
-        depositAmount: snapshot?.depositAmount ?? null,
-      });
-      clearDepositBookingSnapshot();
-    } else {
-      setConfirmedBookingData(
-        snapshot
-          ? bookingDataFromSnapshot(snapshot, { depositCanceled: true })
-          : emptyReturnBookingData({ depositCanceled: true })
-      );
-      setShowConfirmation(true);
-      toast.message("Betaling geannuleerd. Je afspraak is nog niet bevestigd.");
-      emitWidgetEvent("deposit-cancel", { companyId });
-    }
+    const returnBooking = (
+      extras: {
+        depositPaid?: boolean;
+        depositCanceled?: boolean;
+        depositPending?: boolean;
+      }
+    ) =>
+      snapshot
+        ? bookingDataFromSnapshot(snapshot, extras)
+        : emptyReturnBookingData({
+            ...extras,
+            depositAmount: snapshot?.depositAmount ?? null,
+          });
 
     if (window.history.replaceState) {
       window.history.replaceState(
@@ -190,7 +188,51 @@ export function SalonBooking({
         stripCheckoutReturnParams(window.location.href)
       );
     }
-  }, [companyId]);
+
+    if (status === "cancel") {
+      setConfirmedBookingData(returnBooking({ depositCanceled: true }));
+      setShowConfirmation(true);
+      emitWidgetEvent("deposit-cancel", { companyId });
+      clearDepositBookingSnapshot();
+      return;
+    }
+
+    setConfirmedBookingData(returnBooking({ depositPending: true }));
+    setShowConfirmation(true);
+    emitWidgetEvent("deposit-pending", {
+      companyId,
+      holdId: snapshot?.holdId ?? null,
+      sessionId: sessionId ?? snapshot?.sessionId ?? null,
+    });
+
+    let cancelled = false;
+    void (async () => {
+      const promoted = await waitForHoldPromotion(() =>
+        fetchHoldPromotion(supabase, {
+          holdId: snapshot?.holdId ?? null,
+          sessionId: sessionId ?? snapshot?.sessionId ?? null,
+          companyId,
+        })
+      );
+      if (cancelled) return;
+      if (promoted.promoted) {
+        setConfirmedBookingData(
+          returnBooking({ depositPaid: true, depositPending: false })
+        );
+        emitWidgetEvent("deposit-success", {
+          companyId,
+          depositAmount: snapshot?.depositAmount ?? null,
+          holdId: snapshot?.holdId ?? null,
+          appointmentId: promoted.appointmentId,
+        });
+        clearDepositBookingSnapshot();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, supabase]);
 
   const isValidEmail = (emailValue: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -919,6 +961,9 @@ export function SalonBooking({
         locationAddress: locationState.selectedLocation
           ? formatLocationAddress(locationState.selectedLocation) || undefined
           : undefined,
+        holdId: createResult.holdId,
+        sessionId: createResult.sessionId,
+        savedAt: Date.now(),
       };
 
       const createOutcome = resolveAppointmentCreateOutcome(createResult);
@@ -976,7 +1021,8 @@ export function SalonBooking({
     if (
       showConfirmation &&
       confirmedBookingData &&
-      !confirmedBookingData.depositCanceled
+      !confirmedBookingData.depositCanceled &&
+      !confirmedBookingData.depositPending
     ) {
       const timer1 = setTimeout(() => {
         confetti({

@@ -5,6 +5,7 @@ import {
   ServiceVariantPhase,
   PhaseType,
 } from "./types/types";
+import { interpretHoldPromotion, type HoldPromotion } from "./deposit";
 
 /** Fields sent on every location-aware edge invoke. */
 export type LocationBodyFields = {
@@ -257,6 +258,100 @@ export async function invokeAppointmentCreate(
   }
 ) {
   return supabase.functions.invoke("appointment-create", { body });
+}
+
+/**
+ * Existing public tables only — no new RPCs.
+ * Promoted when hold status is completed and/or an appointment exists for the hold.
+ */
+export async function fetchHoldPromotion(
+  supabase: SupabaseClient,
+  args: {
+    holdId: string | null;
+    sessionId: string | null;
+    companyId: string;
+  }
+): Promise<HoldPromotion> {
+  const empty: HoldPromotion = {
+    promoted: false,
+    holdStatus: null,
+    appointmentId: null,
+  };
+
+  const readRow = (data: unknown): HoldPromotion | null => {
+    const row = asRecord(data);
+    if (!row) return null;
+    return interpretHoldPromotion(row);
+  };
+
+  let last = empty;
+
+  if (args.holdId) {
+    const hold = await supabase
+      .from("booking_hold")
+      .select("id, status, appointment_id, booking_id")
+      .eq("id", args.holdId)
+      .maybeSingle();
+    const fromHold = readRow(hold.data);
+    if (fromHold?.promoted) return fromHold;
+    if (fromHold) last = fromHold;
+
+    const appointment = await supabase
+      .from("appointment")
+      .select("id, status, hold_id")
+      .eq("hold_id", args.holdId)
+      .maybeSingle();
+    const appt = asRecord(appointment.data);
+    if (appt && typeof appt.id === "string" && appt.id.trim() !== "") {
+      return {
+        promoted: true,
+        holdStatus: last.holdStatus,
+        appointmentId: appt.id,
+      };
+    }
+  }
+
+  if (args.sessionId) {
+    for (const column of [
+      "stripe_session_id",
+      "checkout_session_id",
+      "session_id",
+    ] as const) {
+      const hold = await supabase
+        .from("booking_hold")
+        .select("id, status, appointment_id, booking_id")
+        .eq(column, args.sessionId)
+        .maybeSingle();
+      const fromHold = readRow(hold.data);
+      if (fromHold?.promoted) return fromHold;
+      if (fromHold?.holdStatus) last = fromHold;
+
+      if (fromHold && !fromHold.promoted) {
+        const holdId =
+          typeof asRecord(hold.data)?.id === "string"
+            ? (asRecord(hold.data)!.id as string)
+            : null;
+        if (holdId) {
+          const appointment = await supabase
+            .from("appointment")
+            .select("id, status, hold_id")
+            .eq("hold_id", holdId)
+            .maybeSingle();
+          const appt = asRecord(appointment.data);
+          if (appt && typeof appt.id === "string" && appt.id.trim() !== "") {
+            return {
+              promoted: true,
+              holdStatus: fromHold.holdStatus,
+              appointmentId: appt.id,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  void args.companyId;
+  return last;
 }
 
 export function eligibleStaffIdsForVariant(

@@ -115,7 +115,7 @@ Host postMessage (so the top window can leave for Stripe when `window.top.locati
 { type: "salonify-booking-event", event: "checkout", data: { checkout_url, checkoutUrl } }
 ```
 
-Hosts should only follow `https://checkout.stripe.com`. Stripe return lands on the **host** path (`?deposit=success|cancel`). The widget’s own return screens are for standalone widget URLs.
+Hosts should only follow `https://checkout.stripe.com`. Stripe return lands on the **host** path (`?deposit=success|cancel`). Forward those query params (and `session_id`) on the iframe `src` so the widget can show the return screen instead of the location picker.
 
 ```
 https://booking.salonify.co/glennie?deposit=success
@@ -126,7 +126,8 @@ https://your-domain.com/widget?companySlug=glennie&deposit=cancel
 
 | Return | Widget |
 |---|---|
-| `deposit=success` (or `session_id`) | Confirmation: voorschot paid |
+| `deposit=success` (or `session_id`) | Processing screen, then **Tot snel!** + confetti **only** if the hold is `completed` and/or an appointment exists |
+| Unpaid / still-`hold_active` after a short poll | Stay on the processing screen — **no** confetti, **not** the location picker |
 | `deposit=cancel` | Cancelled payment; appointment is not treated as confirmed |
 
 ### Multi-location embed URLs

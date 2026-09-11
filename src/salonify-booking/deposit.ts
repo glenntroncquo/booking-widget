@@ -14,6 +14,14 @@ export type AppointmentCreateResult = {
   holdId: string | null;
   status: string | null;
   bookingId: string | null;
+  sessionId: string | null;
+};
+
+/** Public hold/appointment lookup — no new RPCs. */
+export type HoldPromotion = {
+  promoted: boolean;
+  holdStatus: string | null;
+  appointmentId: string | null;
 };
 
 /** Phase B deposit hold, or confirm the old scheduled book. */
@@ -33,6 +41,9 @@ export type DepositBookingSnapshot = {
   locationName?: string;
   locationAddress?: string;
   referralApplied?: boolean;
+  holdId?: string | null;
+  sessionId?: string | null;
+  savedAt?: number;
 };
 
 const SNAPSHOT_KEY = "salonify-deposit-booking";
@@ -99,10 +110,112 @@ export function parseCheckoutReturn(search: string): CheckoutReturnStatus {
   if (raw === "cancel" || raw === "canceled" || raw === "cancelled") {
     return "cancel";
   }
-  if (params.get("session_id")) {
+  if (parseCheckoutSessionId(search)) {
     return "success";
   }
   return null;
+}
+
+/** Stripe Checkout session id from the return URL. Ignores the unsubstituted placeholder. */
+export function parseCheckoutSessionId(search: string): string | null {
+  const query = search.startsWith("?") ? search.slice(1) : search;
+  const params = new URLSearchParams(query);
+  const raw = params.get("session_id")?.trim() ?? "";
+  if (!raw || raw === "{CHECKOUT_SESSION_ID}") return null;
+  return raw;
+}
+
+export const HOLD_POLL_ATTEMPTS = 10;
+export const HOLD_POLL_DELAY_MS = 600;
+const SNAPSHOT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+
+const PROMOTED_HOLD_STATUSES = new Set([
+  "completed",
+  "complete",
+  "paid",
+  "scheduled",
+  "confirmed",
+  "promoted",
+]);
+
+/**
+ * Success only when the hold was promoted or an appointment exists.
+ * `hold_active` / unpaid / missing rows stay pending — never confetti.
+ */
+export function interpretHoldPromotion(
+  row: Record<string, unknown> | null | undefined
+): HoldPromotion {
+  if (!row) {
+    return { promoted: false, holdStatus: null, appointmentId: null };
+  }
+  const holdStatus = readString(row.status);
+  const appointmentId = readString(
+    row.appointment_id,
+    row.appointmentId,
+    row.booking_id,
+    row.bookingId,
+    row.id && (row.hold_id != null || row.holdId != null) ? row.id : undefined
+  );
+  const status = holdStatus?.toLowerCase() ?? "";
+  const promoted =
+    PROMOTED_HOLD_STATUSES.has(status) || Boolean(appointmentId);
+  return { promoted, holdStatus, appointmentId };
+}
+
+export async function waitForHoldPromotion(
+  fetchOnce: () => Promise<HoldPromotion>,
+  options: {
+    attempts?: number;
+    delayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+  } = {}
+): Promise<HoldPromotion> {
+  const attempts = options.attempts ?? HOLD_POLL_ATTEMPTS;
+  const delayMs = options.delayMs ?? HOLD_POLL_DELAY_MS;
+  const sleep =
+    options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  let last: HoldPromotion = {
+    promoted: false,
+    holdStatus: null,
+    appointmentId: null,
+  };
+  for (let i = 0; i < attempts; i++) {
+    last = await fetchOnce();
+    if (last.promoted) return last;
+    if (i < attempts - 1) await sleep(delayMs);
+  }
+  return last;
+}
+
+/** Host embed often omits deposit= on the iframe; a fresh hold snapshot is a return. */
+export function isFreshDepositSnapshot(
+  snapshot: DepositBookingSnapshot | null,
+  now = Date.now()
+): boolean {
+  if (!snapshot) return false;
+  if (!snapshot.holdId && !snapshot.sessionId) return false;
+  if (snapshot.savedAt == null) return true;
+  return now - snapshot.savedAt < SNAPSHOT_MAX_AGE_MS;
+}
+
+/**
+ * Stripe replaces `{CHECKOUT_SESSION_ID}` on success_url so the widget can poll.
+ * Keep braces literal — do not URL-encode the placeholder.
+ */
+export function withCheckoutSessionPlaceholder(url: string): string {
+  try {
+    const parsed = new URL(coerceHttpUrlString(url));
+    const existing = parsed.searchParams.get("session_id");
+    if (existing && existing !== "{CHECKOUT_SESSION_ID}") {
+      return parsed.toString();
+    }
+    parsed.searchParams.delete("session_id");
+    const base = parsed.toString();
+    const join = parsed.search ? "&" : "?";
+    return `${base}${join}session_id={CHECKOUT_SESSION_ID}`;
+  } catch {
+    return url;
+  }
 }
 
 export function stripCheckoutReturnParams(href: string): string {
@@ -152,6 +265,7 @@ export function parseAppointmentCreateResult(
     holdId: null,
     status: null,
     bookingId: null,
+    sessionId: null,
   };
   const payload = unwrapCreatePayload(data);
   if (!payload) return empty;
@@ -182,6 +296,12 @@ export function parseAppointmentCreateResult(
     holdId: readString(payload.hold_id, payload.holdId),
     status,
     bookingId: readString(payload.booking_id, payload.bookingId),
+    sessionId: readString(
+      payload.session_id,
+      payload.sessionId,
+      checkout?.session_id,
+      checkout?.sessionId
+    ),
   };
 }
 
@@ -362,7 +482,9 @@ export function resolveDepositReturnUrls(options: {
 }): { success_url: string; cancel_url: string } {
   const fallback = buildCheckoutReturnUrls(options.fallbackHref);
   return {
-    success_url: readHttpUrl(options.successUrl) ?? fallback.successUrl,
+    success_url: withCheckoutSessionPlaceholder(
+      readHttpUrl(options.successUrl) ?? fallback.successUrl
+    ),
     cancel_url: readHttpUrl(options.cancelUrl) ?? fallback.cancelUrl,
   };
 }
@@ -494,7 +616,11 @@ function snapshotServices(
 
 export function bookingDataFromSnapshot(
   snapshot: DepositBookingSnapshot,
-  extras: { depositPaid?: boolean; depositCanceled?: boolean } = {}
+  extras: {
+    depositPaid?: boolean;
+    depositCanceled?: boolean;
+    depositPending?: boolean;
+  } = {}
 ): BookingData {
   const parsed = snapshot.date ? new Date(snapshot.date) : null;
   return {
@@ -509,6 +635,7 @@ export function bookingDataFromSnapshot(
     depositAmount: snapshot.depositAmount,
     depositPaid: extras.depositPaid,
     depositCanceled: extras.depositCanceled,
+    depositPending: extras.depositPending,
   };
 }
 
@@ -516,6 +643,7 @@ export function emptyReturnBookingData(
   extras: {
     depositPaid?: boolean;
     depositCanceled?: boolean;
+    depositPending?: boolean;
     depositAmount?: number | null;
   } = {}
 ): BookingData {
@@ -528,6 +656,7 @@ export function emptyReturnBookingData(
     depositAmount: extras.depositAmount ?? null,
     depositPaid: extras.depositPaid,
     depositCanceled: extras.depositCanceled,
+    depositPending: extras.depositPending,
   };
 }
 
