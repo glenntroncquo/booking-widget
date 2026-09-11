@@ -173,34 +173,41 @@ export async function invokeStaffList(
   return supabase.functions.invoke("staff-list", { body });
 }
 
+function companyIdFromUnknown(value: unknown): string | null {
+  const root = asRecord(value);
+  if (!root) return null;
+  const nested = asRecord(root.data) ?? asRecord(root.company) ?? root;
+  return typeof nested.id === "string" ? nested.id : null;
+}
+
 /** Resolve a public company slug. Table SELECT first; existing company-get if RLS hides it. */
 export async function resolveCompanyIdBySlug(
   supabase: SupabaseClient,
   slug: string
 ): Promise<string | null> {
+  const normalized = slug.trim().toLowerCase();
+  if (!normalized) return null;
+
   const { data, error } = await supabase
     .from("company")
     .select("id")
-    .eq("slug", slug)
+    .eq("slug", normalized)
     .maybeSingle();
   if (!error && data && typeof data.id === "string") {
     return data.id;
   }
 
   const invoked = await supabase.functions.invoke("company-get", {
-    body: { slug },
+    body: { slug: normalized },
   });
   if (invoked.error) {
     console.warn(
       "[Salonify Widget] company-get failed to resolve slug:",
       invoked.error.message
     );
-    return null;
+    return companyIdFromUnknown(invoked.data);
   }
-  const root = asRecord(invoked.data);
-  if (!root) return null;
-  const nested = asRecord(root.data) ?? asRecord(root.company) ?? root;
-  return typeof nested.id === "string" ? nested.id : null;
+  return companyIdFromUnknown(invoked.data);
 }
 
 export async function invokeAvailabilityList(
