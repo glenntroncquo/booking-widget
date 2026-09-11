@@ -56,18 +56,19 @@ import {
 } from "./api";
 import {
   bookingDataFromSnapshot,
-  buildCheckoutReturnUrls,
   clearDepositBookingSnapshot,
   emptyReturnBookingData,
   emitWidgetEvent,
   loadDepositBookingSnapshot,
-  openCheckoutUrl,
+  followCheckoutUrl,
   parseAppointmentCreateResult,
   parseCheckoutReturn,
   resolveCheckoutHref,
+  resolveDepositReturnUrls,
   saveDepositBookingSnapshot,
   stripCheckoutReturnParams,
   sumSelectedDepositAmount,
+  coalesceDepositAmount,
 } from "./deposit";
 
 export function SalonBooking({
@@ -80,6 +81,10 @@ export function SalonBooking({
   initialStaffSlugs = [],
   locationId: pinnedLocationId,
   locationSlug: pinnedLocationSlug,
+  successUrl: hostSuccessUrl,
+  cancelUrl: hostCancelUrl,
+  depositAmount: hostDepositAmount,
+  depositEnabled: hostDepositEnabled,
 }: SalonBookingProps) {
   const supabase = useMemo(() => {
     return createClient(supabaseConfig.url, supabaseConfig.anonKey);
@@ -682,6 +687,10 @@ export function SalonBooking({
           return "Het ging net mis door drukte. Probeer het nog eens.";
         case "BOOKING_FAILED":
           return "Boeken is niet gelukt. Probeer het opnieuw.";
+        case "DEPOSIT_URLS_REQUIRED":
+          return "Betaling kan niet worden gestart. Probeer het opnieuw vanuit de boekingspagina.";
+        case "CHARGES_NOT_ENABLED":
+          return "Online betalen is nog niet actief voor deze zaak. Neem contact op om te boeken.";
         default:
           break;
       }
@@ -797,9 +806,11 @@ export function SalonBooking({
       );
 
       const referralCodeTrimmed = bookingState.referralCode.trim();
-      const { successUrl, cancelUrl } = buildCheckoutReturnUrls(
-        resolveCheckoutHref()
-      );
+      const { success_url, cancel_url } = resolveDepositReturnUrls({
+        successUrl: hostSuccessUrl,
+        cancelUrl: hostCancelUrl,
+        fallbackHref: resolveCheckoutHref(),
+      });
 
       const response = await invokeAppointmentCreate(supabase, {
         start,
@@ -819,10 +830,8 @@ export function SalonBooking({
         ...(referralCodeTrimmed.length > 0
           ? { referralCode: referralCodeTrimmed }
           : {}),
-        successUrl,
-        cancelUrl,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
+        success_url,
+        cancel_url,
       });
 
       const hasReferralCode = referralCodeTrimmed.length > 0;
@@ -858,7 +867,11 @@ export function SalonBooking({
       const catalogDeposit = sumSelectedDepositAmount(
         bookingState.selectedServices
       );
-      const depositAmount = createResult.depositAmount ?? catalogDeposit;
+      const depositAmount = coalesceDepositAmount(
+        createResult.depositAmount,
+        catalogDeposit,
+        hostDepositAmount
+      );
 
       const staffName = (() => {
         const ids = uniqueStaffIds(bookingState.selectedServices);
@@ -903,13 +916,14 @@ export function SalonBooking({
 
       if (createResult.checkoutUrl) {
         saveDepositBookingSnapshot(bookingSnapshot);
-        emitWidgetEvent("deposit-checkout", {
-          checkoutUrl: createResult.checkoutUrl,
-          depositAmount,
-          companyId,
-        });
+        if (!followCheckoutUrl(createResult.checkoutUrl)) {
+          clearDepositBookingSnapshot();
+          toast.error(
+            "Betaling kon niet worden geopend. Probeer het opnieuw."
+          );
+          return;
+        }
         toast.success("Je wordt doorgestuurd naar de betaling…");
-        openCheckoutUrl(createResult.checkoutUrl);
         return;
       }
 
@@ -1265,6 +1279,8 @@ export function SalonBooking({
                 imageUploading={imageUpload.imageUploading}
                 theme={theme}
                 supabase={supabase}
+                hostDepositAmount={hostDepositAmount}
+                hostDepositEnabled={hostDepositEnabled}
                 onFirstNameChange={bookingState.setFirstName}
                 onLastNameChange={bookingState.setLastName}
                 onEmailChange={bookingState.setEmail}
@@ -1287,6 +1303,8 @@ export function SalonBooking({
           currentStep={bookingState.currentStep}
           selectedServices={bookingState.selectedServices}
           submitting={bookingState.submitting}
+          hostDepositAmount={hostDepositAmount}
+          hostDepositEnabled={hostDepositEnabled}
           onPreviousStep={bookingState.handlePreviousStep}
           onNextStep={bookingState.handleNextStep}
           onSubmit={handleSubmit}

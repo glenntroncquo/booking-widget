@@ -1,6 +1,10 @@
 import { Button } from "./components/button";
 import { calculateTotalPriceRange } from "./utils";
-import { formatEuro, sumSelectedDepositAmount } from "./deposit";
+import {
+  formatEuro,
+  previewDepositHint,
+  sumSelectedDepositAmount,
+} from "./deposit";
 
 import { SelectedService } from "./types/types";
 
@@ -9,6 +13,8 @@ interface BookingFooterProps {
   currentStep: number;
   selectedServices: SelectedService[];
   submitting: boolean;
+  hostDepositAmount?: number | null;
+  hostDepositEnabled?: boolean;
   onPreviousStep: () => void;
   onNextStep: () => void;
   onSubmit: () => void;
@@ -20,6 +26,8 @@ export function BookingFooter({
   currentStep,
   selectedServices,
   submitting,
+  hostDepositAmount,
+  hostDepositEnabled,
   onPreviousStep,
   onNextStep,
   onSubmit,
@@ -36,9 +44,15 @@ export function BookingFooter({
           : priceRange.baseTotal;
 
   const hasNoServices = selectedServices.length === 0;
-  const depositAmount = sumSelectedDepositAmount(selectedServices);
-  const submitLabel =
-    depositAmount != null ? "Betaal voorschot" : "Afspraak maken";
+  const depositHint = previewDepositHint(
+    sumSelectedDepositAmount(selectedServices),
+    hostDepositAmount,
+    hostDepositEnabled
+  );
+  const depositAmount = depositHint.amount;
+  const submitLabel = depositHint.showCta
+    ? "Betaal voorschot"
+    : "Afspraak maken";
 
   if (isMobile) {
     return (

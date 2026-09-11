@@ -3,8 +3,12 @@ import { describe, it } from "node:test";
 import {
   buildCheckoutReturnUrls,
   checkoutReturnBaseHref,
+  followCheckoutUrl,
+  isStripeCheckoutUrl,
   parseAppointmentCreateResult,
   parseCheckoutReturn,
+  previewDepositHint,
+  resolveDepositReturnUrls,
   stripCheckoutReturnParams,
   sumSelectedDepositAmount,
 } from "../src/salonify-booking/deposit.ts";
@@ -113,5 +117,92 @@ describe("sumSelectedDepositAmount", () => {
       sumSelectedDepositAmount([{ variant: {}, service: {} }]),
       null
     );
+  });
+});
+
+describe("parseCheckoutReturn session_id", () => {
+  it("treats Stripe session_id as success", () => {
+    assert.equal(
+      parseCheckoutReturn("?companySlug=glennie&session_id=cs_test"),
+      "success"
+    );
+  });
+});
+
+describe("isStripeCheckoutUrl", () => {
+  it("allows checkout.stripe.com https only", () => {
+    assert.equal(
+      isStripeCheckoutUrl("https://checkout.stripe.com/c/pay/cs_test"),
+      true
+    );
+    assert.equal(
+      isStripeCheckoutUrl("https://pay.checkout.stripe.com/c/pay/cs_test"),
+      true
+    );
+    assert.equal(
+      isStripeCheckoutUrl("https://evil.example/?u=https://checkout.stripe.com"),
+      false
+    );
+    assert.equal(
+      isStripeCheckoutUrl("http://checkout.stripe.com/c/pay/cs_test"),
+      false
+    );
+  });
+});
+
+describe("resolveDepositReturnUrls", () => {
+  it("prefers host booking-path URLs", () => {
+    const urls = resolveDepositReturnUrls({
+      successUrl: "https://booking.salonify.co/glennie?deposit=success",
+      cancelUrl: "https://booking.salonify.co/glennie?deposit=cancel",
+      fallbackHref: "https://widget.example/widget?companySlug=glennie",
+    });
+    assert.equal(
+      urls.success_url,
+      "https://booking.salonify.co/glennie?deposit=success"
+    );
+    assert.equal(
+      urls.cancel_url,
+      "https://booking.salonify.co/glennie?deposit=cancel"
+    );
+  });
+
+  it("falls back to widget href when host URLs are missing", () => {
+    const urls = resolveDepositReturnUrls({
+      fallbackHref: "https://widget.example/widget?companySlug=glennie",
+    });
+    const success = new URL(urls.success_url);
+    const cancel = new URL(urls.cancel_url);
+    assert.equal(success.searchParams.get("companySlug"), "glennie");
+    assert.equal(success.searchParams.get("deposit"), "success");
+    assert.equal(cancel.searchParams.get("deposit"), "cancel");
+  });
+
+  it("rejects non-http host urls", () => {
+    const urls = resolveDepositReturnUrls({
+      successUrl: "javascript:alert(1)",
+      fallbackHref: "https://widget.example/widget?companySlug=glennie",
+    });
+    assert.match(urls.success_url, /widget\.example/);
+  });
+});
+
+describe("followCheckoutUrl", () => {
+  it("rejects non-stripe urls", () => {
+    assert.equal(followCheckoutUrl("https://evil.example/pay"), false);
+  });
+});
+
+describe("previewDepositHint", () => {
+  it("shows CTA when host enabled even without amount", () => {
+    const hint = previewDepositHint(null, null, true);
+    assert.equal(hint.amount, null);
+    assert.equal(hint.showCta, true);
+  });
+
+  it("prefers catalog amount over host amount", () => {
+    const hint = previewDepositHint(25, 10, false);
+    assert.equal(hint.amount, 25);
+    assert.equal(hint.showCta, true);
   });
 });

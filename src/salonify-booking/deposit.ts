@@ -3,6 +3,8 @@
 import type { BookingData } from "./types/types";
 
 export const DEPOSIT_QUERY_PARAM = "deposit";
+export const WIDGET_CHECKOUT_EVENT = "salonify-checkout";
+export const WIDGET_BOOKING_EVENT = "salonify-booking-event";
 
 export type CheckoutReturnStatus = "success" | "cancel" | null;
 
@@ -82,6 +84,9 @@ export function parseCheckoutReturn(search: string): CheckoutReturnStatus {
   }
   if (raw === "cancel" || raw === "canceled" || raw === "cancelled") {
     return "cancel";
+  }
+  if (params.get("session_id")) {
+    return "success";
   }
   return null;
 }
@@ -192,6 +197,124 @@ export function formatEuro(amount: number): string {
   return amount.toFixed(2).replace(".", ",");
 }
 
+export function coalesceDepositAmount(
+  ...amounts: Array<number | null | undefined>
+): number | null {
+  for (const amount of amounts) {
+    if (typeof amount === "number" && Number.isFinite(amount) && amount > 0) {
+      return amount;
+    }
+  }
+  return null;
+}
+
+/** Catalog + host hints for the book step. Server still decides checkout_url. */
+export function previewDepositHint(
+  catalogAmount: number | null,
+  hostAmount?: number | null,
+  hostEnabled?: boolean
+): { amount: number | null; showCta: boolean } {
+  const amount = coalesceDepositAmount(catalogAmount, hostAmount);
+  return {
+    amount,
+    showCta: hostEnabled === true || amount != null,
+  };
+}
+
+export function parsePositiveNumber(value: unknown): number | null {
+  return coalesceDepositAmount(readNumber(value));
+}
+
+export function parseBooleanFlag(value: unknown): boolean | undefined {
+  if (value === true || value === false) return value;
+  if (typeof value !== "string") return undefined;
+  const lower = value.trim().toLowerCase();
+  if (["1", "true", "yes"].includes(lower)) return true;
+  if (["0", "false", "no"].includes(lower)) return false;
+  return undefined;
+}
+
+export function readHttpUrl(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+/** Stripe Checkout only — never open-redirect. */
+export function isStripeCheckoutUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    return (
+      host === "checkout.stripe.com" || host.endsWith(".checkout.stripe.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Prefer host booking-path URLs (booking#6); otherwise build from the current widget href. */
+export function resolveDepositReturnUrls(options: {
+  successUrl?: string | null;
+  cancelUrl?: string | null;
+  fallbackHref: string;
+}): { success_url: string; cancel_url: string } {
+  const fallback = buildCheckoutReturnUrls(options.fallbackHref);
+  return {
+    success_url: readHttpUrl(options.successUrl) ?? fallback.successUrl,
+    cancel_url: readHttpUrl(options.cancelUrl) ?? fallback.cancelUrl,
+  };
+}
+
+export function emitCheckoutToHost(checkoutUrl: string): void {
+  if (typeof window === "undefined") return;
+  if (!(window.parent && window.parent !== window)) return;
+  window.parent.postMessage(
+    {
+      type: WIDGET_CHECKOUT_EVENT,
+      checkout_url: checkoutUrl,
+      checkoutUrl,
+    },
+    "*"
+  );
+  window.parent.postMessage(
+    {
+      type: WIDGET_BOOKING_EVENT,
+      event: "checkout",
+      data: { checkout_url: checkoutUrl, checkoutUrl },
+    },
+    "*"
+  );
+}
+
+/**
+ * Follow appointment-create checkout_url.
+ * Iframe: postMessage for the host (booking#6) then try top navigation.
+ * Standalone: redirect this window. Never load Checkout inside a nested iframe.
+ */
+export function followCheckoutUrl(checkoutUrl: string): boolean {
+  if (!isStripeCheckoutUrl(checkoutUrl)) return false;
+  emitCheckoutToHost(checkoutUrl);
+  const inIframe =
+    typeof window !== "undefined" && window.parent !== window;
+  if (inIframe) {
+    try {
+      window.top?.location.assign(checkoutUrl);
+    } catch {
+      // Cross-origin host redirects from salonify-checkout / checkout event.
+    }
+    return true;
+  }
+  window.location.assign(checkoutUrl);
+  return true;
+}
+
 export function resolveCheckoutHref(): string {
   let topHref: string | null = null;
   try {
@@ -205,15 +328,7 @@ export function resolveCheckoutHref(): string {
 }
 
 export function openCheckoutUrl(checkoutUrl: string): void {
-  try {
-    if (window.top && window.top !== window) {
-      window.top.location.assign(checkoutUrl);
-      return;
-    }
-  } catch {
-    // Sandboxed / cross-origin iframe may block top navigation.
-  }
-  window.location.assign(checkoutUrl);
+  followCheckoutUrl(checkoutUrl);
 }
 
 export function saveDepositBookingSnapshot(
@@ -253,7 +368,7 @@ export function emitWidgetEvent(event: string, data?: unknown): void {
   if (window.parent && window.parent !== window) {
     window.parent.postMessage(
       {
-        type: "salonify-booking-event",
+        type: WIDGET_BOOKING_EVENT,
         event,
         data,
       },

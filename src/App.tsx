@@ -3,6 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 import { SalonBooking } from "./salonify-booking";
 import { FloatingLauncher } from "./components/FloatingLauncher";
 import { resolveCompanyIdBySlug } from "./salonify-booking/api";
+import {
+  parseBooleanFlag,
+  parsePositiveNumber,
+  readHttpUrl,
+} from "./salonify-booking/deposit";
 
 // Define SalonTheme locally (not exported from package)
 interface SalonTheme {
@@ -37,6 +42,10 @@ interface WidgetConfig {
   staffSlugs?: string[];
   locationId?: string;
   locationSlug?: string;
+  successUrl?: string;
+  cancelUrl?: string;
+  depositAmount?: number | null;
+  depositEnabled?: boolean;
 }
 
 interface ErrorState {
@@ -118,6 +127,20 @@ function App() {
         : [];
     const staffIds = parseList(params.get("staffIds"));
     const staffSlugs = parseList(params.get("staffSlugs"));
+    const successUrl =
+      readHttpUrl(params.get("successUrl")) ??
+      readHttpUrl(params.get("success_url")) ??
+      undefined;
+    const cancelUrl =
+      readHttpUrl(params.get("cancelUrl")) ??
+      readHttpUrl(params.get("cancel_url")) ??
+      undefined;
+    const depositAmount = parsePositiveNumber(
+      params.get("depositAmount") ?? params.get("deposit_amount")
+    );
+    const depositEnabled =
+      parseBooleanFlag(params.get("depositEnabled")) ??
+      parseBooleanFlag(params.get("deposit_enabled"));
 
     return {
       companyId,
@@ -131,6 +154,10 @@ function App() {
       showStaff,
       staffIds,
       staffSlugs,
+      successUrl,
+      cancelUrl,
+      depositAmount,
+      depositEnabled,
     };
   }, []);
 
@@ -162,6 +189,10 @@ function App() {
       showStaff,
       staffIds: staffIdsParam,
       staffSlugs,
+      successUrl,
+      cancelUrl,
+      depositAmount,
+      depositEnabled,
     } = parseUrlParams;
 
     let cancelled = false;
@@ -234,6 +265,10 @@ function App() {
         staffSlugs,
         locationId: locationId || undefined,
         locationSlug: locationSlug || undefined,
+        successUrl,
+        cancelUrl,
+        depositAmount,
+        depositEnabled,
       });
       setError(null);
       setLoading(false);
@@ -290,8 +325,26 @@ function App() {
         // Handle full config updates
         if (event.data.type === "widget-config" && event.data.config) {
           if (config) {
-            const newConfig = event.data.config as Partial<WidgetConfig>;
-            // Merge theme if provided
+            const incoming = event.data.config as Record<string, unknown>;
+            const newConfig = {
+              ...incoming,
+              successUrl:
+                readHttpUrl(incoming.successUrl) ??
+                readHttpUrl(incoming.success_url) ??
+                config.successUrl,
+              cancelUrl:
+                readHttpUrl(incoming.cancelUrl) ??
+                readHttpUrl(incoming.cancel_url) ??
+                config.cancelUrl,
+              depositAmount:
+                parsePositiveNumber(incoming.depositAmount) ??
+                parsePositiveNumber(incoming.deposit_amount) ??
+                config.depositAmount,
+              depositEnabled:
+                parseBooleanFlag(incoming.depositEnabled) ??
+                parseBooleanFlag(incoming.deposit_enabled) ??
+                config.depositEnabled,
+            } as Partial<WidgetConfig>;
             if (newConfig.theme) {
               newConfig.theme = {
                 ...defaultTheme,
@@ -376,6 +429,10 @@ function App() {
             initialStaffSlugs={config.staffSlugs}
             locationId={config.locationId}
             locationSlug={config.locationSlug}
+            successUrl={config.successUrl}
+            cancelUrl={config.cancelUrl}
+            depositAmount={config.depositAmount}
+            depositEnabled={config.depositEnabled}
           />
         </FloatingLauncher>
       ) : (
@@ -392,6 +449,10 @@ function App() {
           initialStaffSlugs={config.staffSlugs}
           locationId={config.locationId}
           locationSlug={config.locationSlug}
+          successUrl={config.successUrl}
+          cancelUrl={config.cancelUrl}
+          depositAmount={config.depositAmount}
+          depositEnabled={config.depositEnabled}
         />
       )}
     </div>

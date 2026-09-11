@@ -218,6 +218,11 @@ export async function invokeAvailabilityList(
   return supabase.functions.invoke("availability-list", { body });
 }
 
+/**
+ * Public widget booking. Uses appointment-create only.
+ * Do not invoke payment-create-checkout from here — that path is staff XOR.
+ * Live v24 returns checkout_url + deposit_amount and requires success_url + cancel_url.
+ */
 export async function invokeAppointmentCreate(
   supabase: SupabaseClient,
   body: {

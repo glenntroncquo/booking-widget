@@ -25,6 +25,12 @@ export interface SalonBookingProps {
   locationId?: string;
   /** Pinned location slug, resolved against public.location for this company. */
   locationSlug?: string;
+  /** Host booking-path return URLs (booking#6). Prefer these on appointment-create. */
+  successUrl?: string;
+  cancelUrl?: string;
+  /** Optional deposit hint from host company-get / widget-config. */
+  depositAmount?: number | null;
+  depositEnabled?: boolean;
 }
 
 export interface LocationOption {
