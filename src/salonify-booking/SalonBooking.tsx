@@ -167,6 +167,7 @@ export function SalonBooking({
     if (!status && !embedReturn) return;
     checkoutReturnHandled.current = true;
 
+    const snapshotDepositAmount = snapshot?.depositAmount ?? null;
     const returnBooking = (
       extras: {
         depositPaid?: boolean;
@@ -178,7 +179,7 @@ export function SalonBooking({
         ? bookingDataFromSnapshot(snapshot, extras)
         : emptyReturnBookingData({
             ...extras,
-            depositAmount: snapshot?.depositAmount ?? null,
+            depositAmount: snapshotDepositAmount,
           });
 
     if (window.history.replaceState) {
@@ -211,7 +212,6 @@ export function SalonBooking({
         fetchHoldPromotion(supabase, {
           holdId: snapshot?.holdId ?? null,
           sessionId: sessionId ?? snapshot?.sessionId ?? null,
-          companyId,
         })
       );
       if (cancelled) return;

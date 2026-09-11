@@ -269,7 +269,6 @@ export async function fetchHoldPromotion(
   args: {
     holdId: string | null;
     sessionId: string | null;
-    companyId: string;
   }
 ): Promise<HoldPromotion> {
   const empty: HoldPromotion = {
@@ -350,7 +349,6 @@ export async function fetchHoldPromotion(
     }
   }
 
-  void args.companyId;
   return last;
 }
 
