@@ -173,6 +173,36 @@ export async function invokeStaffList(
   return supabase.functions.invoke("staff-list", { body });
 }
 
+/** Resolve a public company slug. Table SELECT first; existing company-get if RLS hides it. */
+export async function resolveCompanyIdBySlug(
+  supabase: SupabaseClient,
+  slug: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("company")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!error && data && typeof data.id === "string") {
+    return data.id;
+  }
+
+  const invoked = await supabase.functions.invoke("company-get", {
+    body: { slug },
+  });
+  if (invoked.error) {
+    console.warn(
+      "[Salonify Widget] company-get failed to resolve slug:",
+      invoked.error.message
+    );
+    return null;
+  }
+  const root = asRecord(invoked.data);
+  if (!root) return null;
+  const nested = asRecord(root.data) ?? asRecord(root.company) ?? root;
+  return typeof nested.id === "string" ? nested.id : null;
+}
+
 export async function invokeAvailabilityList(
   supabase: SupabaseClient,
   body: {

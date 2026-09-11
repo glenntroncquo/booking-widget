@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { SalonBooking } from "./salonify-booking";
 import { FloatingLauncher } from "./components/FloatingLauncher";
+import { resolveCompanyIdBySlug } from "./salonify-booking/api";
 
 // Define SalonTheme locally (not exported from package)
 interface SalonTheme {
@@ -169,19 +170,8 @@ function App() {
     // Resolve a company slug to its id. A companyId in the URL takes precedence.
     const resolveCompanyId = async (): Promise<string | null> => {
       if (companyIdParam) return companyIdParam;
-      const { data, error: fetchError } = await supabase
-        .from("company")
-        .select("id")
-        .eq("slug", companySlug)
-        .maybeSingle();
-      if (fetchError) {
-        console.warn(
-          "[Salonify Widget] Failed to resolve company slug:",
-          fetchError.message
-        );
-        return null;
-      }
-      return (data?.id as string | undefined) ?? null;
+      if (!companySlug) return null;
+      return resolveCompanyIdBySlug(supabase, companySlug);
     };
 
     // Fetch per-company styles from company_integrations (config.styles) and
