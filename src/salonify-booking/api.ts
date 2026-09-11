@@ -221,7 +221,8 @@ export async function invokeAvailabilityList(
 /**
  * Public widget booking. Uses appointment-create only.
  * Do not invoke payment-create-checkout from here — that path is staff XOR.
- * Live v24 returns checkout_url + deposit_amount and requires success_url + cancel_url.
+ * Deposit holds return checkout_url + hold_id / hold_active (no booking_id until paid).
+ * Requires success_url + cancel_url. Deposit-off stays the scheduled book.
  */
 export async function invokeAppointmentCreate(
   supabase: SupabaseClient,

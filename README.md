@@ -96,7 +96,9 @@ Company is always required via query (or the equivalent React prop) to start a b
 
 ### Booking deposits (Stripe Checkout)
 
-Live `appointment-create` (v24) returns `checkout_url` + `deposit_amount` when a deposit is required. The public widget **only** uses that function. `payment-create-checkout` stays a staff XOR path and is not called here.
+Live `appointment-create` returns `checkout_url` + `deposit_amount` when a deposit is required. Phase B deposit holds also return `hold_id` and `status: "hold_active"` — **no** `booking_id` / confirmed appointment until the paid webhook. The widget treats that as success and follows `checkout_url` (postMessage + redirect). Missing `booking_id` is not a failure on the hold path. Deposit-off responses stay the old scheduled book (in-widget confirmation).
+
+The public widget **only** uses `appointment-create`. `payment-create-checkout` stays a staff XOR path and is not called here.
 
 On book, the widget always sends snake_case `success_url` and `cancel_url`. Prefer host URLs from the iframe query or `widget-config` (booking-path URLs such as `https://booking.salonify.co/glennie?deposit=success`). If those are missing, the widget builds fallbacks from its own URL. Missing URLs → backend `DEPOSIT_URLS_REQUIRED`. Connect not ready → `CHARGES_NOT_ENABLED`.
 
