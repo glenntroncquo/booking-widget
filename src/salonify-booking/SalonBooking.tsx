@@ -70,6 +70,7 @@ import {
   stripCheckoutReturnParams,
   sumSelectedDepositAmount,
   coalesceDepositAmount,
+  usableStripeCheckoutUrl,
 } from "./deposit";
 
 export function SalonBooking({
@@ -920,15 +921,10 @@ export function SalonBooking({
           : undefined,
       };
 
-      if (createResult.checkoutUrl) {
+      const checkoutUrl = usableStripeCheckoutUrl(createResult.checkoutUrl);
+      if (checkoutUrl) {
         saveDepositBookingSnapshot(bookingSnapshot);
-        if (!followCheckoutUrl(createResult.checkoutUrl)) {
-          clearDepositBookingSnapshot();
-          toast.error(
-            "Betaling kon niet worden geopend. Probeer het opnieuw."
-          );
-          return;
-        }
+        followCheckoutUrl(checkoutUrl);
         toast.success("Je wordt doorgestuurd naar de betaling…");
         return;
       }

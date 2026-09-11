@@ -214,6 +214,9 @@ export function previewDepositHint(
   hostAmount?: number | null,
   hostEnabled?: boolean
 ): { amount: number | null; showCta: boolean } {
+  if (hostEnabled === false) {
+    return { amount: null, showCta: false };
+  }
   const amount = coalesceDepositAmount(catalogAmount, hostAmount);
   return {
     amount,
@@ -293,6 +296,14 @@ export function isStripeCheckoutUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Follow Checkout only when appointment-create returned a Stripe URL. */
+export function usableStripeCheckoutUrl(
+  value: string | null | undefined
+): string | null {
+  if (!value) return null;
+  return isStripeCheckoutUrl(value) ? value : null;
 }
 
 /** Prefer host booking-path URLs (booking#6); otherwise build from the current widget href. */
