@@ -126,8 +126,7 @@ https://your-domain.com/widget?companySlug=glennie&deposit=cancel
 
 | Return | Widget |
 |---|---|
-| `deposit=success` (or `session_id`) | Processing screen, then **Tot snel!** + confetti **only** if the hold is `completed` and/or an appointment exists |
-| Unpaid / still-`hold_active` after a short poll | Stay on the processing screen — **no** confetti, **not** the location picker |
+| `deposit=success` (or `session_id`) | Same confirmation as a non-deposit book: **Tot snel!** + confetti immediately. Stripe only redirects on paid Checkout; the widget does **not** wait, poll, or gate on hold/appointment/webhook status. Appointment insert stays webhook-owned. |
 | `deposit=cancel` | Cancelled payment; appointment is not treated as confirmed |
 
 ### Multi-location embed URLs

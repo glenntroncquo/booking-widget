@@ -172,8 +172,6 @@ export interface BookingData {
   depositAmount?: number | null;
   depositPaid?: boolean;
   depositCanceled?: boolean;
-  /** Stripe return while hold is still active / unpaid — never confetti. */
-  depositPending?: boolean;
 }
 
 export const defaultTheme: SalonTheme = {

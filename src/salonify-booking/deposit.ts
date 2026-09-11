@@ -17,13 +17,6 @@ export type AppointmentCreateResult = {
   sessionId: string | null;
 };
 
-/** Public hold/appointment lookup — no new RPCs. */
-export type HoldPromotion = {
-  promoted: boolean;
-  holdStatus: string | null;
-  appointmentId: string | null;
-};
-
 /** Phase B deposit hold, or confirm the old scheduled book. */
 export type AppointmentCreateOutcome =
   | { action: "checkout"; checkoutUrl: string }
@@ -125,67 +118,7 @@ export function parseCheckoutSessionId(search: string): string | null {
   return raw;
 }
 
-export const HOLD_POLL_ATTEMPTS = 10;
-export const HOLD_POLL_DELAY_MS = 600;
 const SNAPSHOT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
-
-const PROMOTED_HOLD_STATUSES = new Set([
-  "completed",
-  "complete",
-  "paid",
-  "scheduled",
-  "confirmed",
-  "promoted",
-]);
-
-/**
- * Success only when the hold was promoted or an appointment exists.
- * `hold_active` / unpaid / missing rows stay pending — never confetti.
- */
-export function interpretHoldPromotion(
-  row: Record<string, unknown> | null | undefined
-): HoldPromotion {
-  if (!row) {
-    return { promoted: false, holdStatus: null, appointmentId: null };
-  }
-  const holdStatus = readString(row.status);
-  const appointmentId = readString(
-    row.appointment_id,
-    row.appointmentId,
-    row.booking_id,
-    row.bookingId,
-    row.id && (row.hold_id != null || row.holdId != null) ? row.id : undefined
-  );
-  const status = holdStatus?.toLowerCase() ?? "";
-  const promoted =
-    PROMOTED_HOLD_STATUSES.has(status) || Boolean(appointmentId);
-  return { promoted, holdStatus, appointmentId };
-}
-
-export async function waitForHoldPromotion(
-  fetchOnce: () => Promise<HoldPromotion>,
-  options: {
-    attempts?: number;
-    delayMs?: number;
-    sleep?: (ms: number) => Promise<void>;
-  } = {}
-): Promise<HoldPromotion> {
-  const attempts = options.attempts ?? HOLD_POLL_ATTEMPTS;
-  const delayMs = options.delayMs ?? HOLD_POLL_DELAY_MS;
-  const sleep =
-    options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
-  let last: HoldPromotion = {
-    promoted: false,
-    holdStatus: null,
-    appointmentId: null,
-  };
-  for (let i = 0; i < attempts; i++) {
-    last = await fetchOnce();
-    if (last.promoted) return last;
-    if (i < attempts - 1) await sleep(delayMs);
-  }
-  return last;
-}
 
 /** Host embed often omits deposit= on the iframe; a fresh hold snapshot is a return. */
 export function isFreshDepositSnapshot(
@@ -199,7 +132,7 @@ export function isFreshDepositSnapshot(
 }
 
 /**
- * Stripe replaces `{CHECKOUT_SESSION_ID}` on success_url so the widget can poll.
+ * Stripe replaces `{CHECKOUT_SESSION_ID}` on success_url.
  * Keep braces literal — do not URL-encode the placeholder.
  */
 export function withCheckoutSessionPlaceholder(url: string): string {
@@ -614,13 +547,14 @@ function snapshotServices(
   }));
 }
 
+export type CheckoutReturnExtras = {
+  depositPaid?: boolean;
+  depositCanceled?: boolean;
+};
+
 export function bookingDataFromSnapshot(
   snapshot: DepositBookingSnapshot,
-  extras: {
-    depositPaid?: boolean;
-    depositCanceled?: boolean;
-    depositPending?: boolean;
-  } = {}
+  extras: CheckoutReturnExtras = {}
 ): BookingData {
   const parsed = snapshot.date ? new Date(snapshot.date) : null;
   return {
@@ -635,17 +569,11 @@ export function bookingDataFromSnapshot(
     depositAmount: snapshot.depositAmount,
     depositPaid: extras.depositPaid,
     depositCanceled: extras.depositCanceled,
-    depositPending: extras.depositPending,
   };
 }
 
 export function emptyReturnBookingData(
-  extras: {
-    depositPaid?: boolean;
-    depositCanceled?: boolean;
-    depositPending?: boolean;
-    depositAmount?: number | null;
-  } = {}
+  extras: CheckoutReturnExtras & { depositAmount?: number | null } = {}
 ): BookingData {
   return {
     date: null,
@@ -656,7 +584,22 @@ export function emptyReturnBookingData(
     depositAmount: extras.depositAmount ?? null,
     depositPaid: extras.depositPaid,
     depositCanceled: extras.depositCanceled,
-    depositPending: extras.depositPending,
   };
+}
+
+/**
+ * Stripe success/cancel return booking data.
+ * Capture `depositAmount` before the null-narrowing branch so tsc does not
+ * treat `snapshot.depositAmount` as `never` (Vercel #11 fail).
+ */
+export function bookingDataForCheckoutReturn(
+  snapshot: DepositBookingSnapshot | null,
+  extras: CheckoutReturnExtras
+): BookingData {
+  const depositAmount: number | null = snapshot?.depositAmount ?? null;
+  if (snapshot) {
+    return bookingDataFromSnapshot(snapshot, extras);
+  }
+  return emptyReturnBookingData({ ...extras, depositAmount });
 }
 
