@@ -64,13 +64,13 @@ import {
   followCheckoutUrl,
   parseAppointmentCreateResult,
   parseCheckoutReturn,
+  resolveAppointmentCreateOutcome,
   resolveCheckoutHref,
   resolveDepositReturnUrls,
   saveDepositBookingSnapshot,
   stripCheckoutReturnParams,
   sumSelectedDepositAmount,
   coalesceDepositAmount,
-  usableStripeCheckoutUrl,
 } from "./deposit";
 
 export function SalonBooking({
@@ -921,11 +921,18 @@ export function SalonBooking({
           : undefined,
       };
 
-      const checkoutUrl = usableStripeCheckoutUrl(createResult.checkoutUrl);
-      if (checkoutUrl) {
+      const createOutcome = resolveAppointmentCreateOutcome(createResult);
+      if (createOutcome.action === "checkout") {
         saveDepositBookingSnapshot(bookingSnapshot);
-        followCheckoutUrl(checkoutUrl);
+        followCheckoutUrl(createOutcome.checkoutUrl);
         toast.success("Je wordt doorgestuurd naar de betaling…");
+        return;
+      }
+
+      if (createOutcome.action === "hold_missing_checkout") {
+        toast.error(
+          "Betaling kan niet worden gestart. Probeer het opnieuw vanuit de boekingspagina."
+        );
         return;
       }
 

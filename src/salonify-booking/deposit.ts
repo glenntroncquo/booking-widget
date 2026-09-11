@@ -11,7 +11,16 @@ export type CheckoutReturnStatus = "success" | "cancel" | null;
 export type AppointmentCreateResult = {
   checkoutUrl: string | null;
   depositAmount: number | null;
+  holdId: string | null;
+  status: string | null;
+  bookingId: string | null;
 };
+
+/** Phase B deposit hold, or confirm the old scheduled book. */
+export type AppointmentCreateOutcome =
+  | { action: "checkout"; checkoutUrl: string }
+  | { action: "confirm" }
+  | { action: "hold_missing_checkout" };
 
 export type DepositBookingSnapshot = {
   companyId: string;
@@ -64,7 +73,12 @@ function unwrapCreatePayload(data: unknown): Record<string, unknown> | null {
       nested.checkoutUrl != null ||
       nested.deposit_amount != null ||
       nested.depositAmount != null ||
-      nested.checkout != null)
+      nested.checkout != null ||
+      nested.hold_id != null ||
+      nested.holdId != null ||
+      nested.status != null ||
+      nested.booking_id != null ||
+      nested.bookingId != null)
   ) {
     return nested;
   }
@@ -132,8 +146,15 @@ export function buildCheckoutReturnUrls(currentHref: string): {
 export function parseAppointmentCreateResult(
   data: unknown
 ): AppointmentCreateResult {
+  const empty: AppointmentCreateResult = {
+    checkoutUrl: null,
+    depositAmount: null,
+    holdId: null,
+    status: null,
+    bookingId: null,
+  };
   const payload = unwrapCreatePayload(data);
-  if (!payload) return { checkoutUrl: null, depositAmount: null };
+  if (!payload) return empty;
 
   const checkout = asRecord(payload.checkout);
   const checkoutUrl = readString(
@@ -153,11 +174,38 @@ export function parseAppointmentCreateResult(
     deposit?.amount
   );
 
+  const status = readString(payload.status);
   return {
     checkoutUrl,
     depositAmount:
       depositAmount != null && depositAmount > 0 ? depositAmount : null,
+    holdId: readString(payload.hold_id, payload.holdId),
+    status,
+    bookingId: readString(payload.booking_id, payload.bookingId),
   };
+}
+
+/** hold_id / hold_active is a deposit hold — not a missing booking_id failure. */
+export function isDepositHold(result: AppointmentCreateResult): boolean {
+  const status = result.status?.trim().toLowerCase();
+  return Boolean(result.holdId) || status === "hold_active";
+}
+
+/**
+ * checkout_url → Stripe (v24 or Phase B hold). Hold without checkout_url fails.
+ * Missing booking_id is OK on hold. Deposit-off stays confirm.
+ */
+export function resolveAppointmentCreateOutcome(
+  result: AppointmentCreateResult
+): AppointmentCreateOutcome {
+  const checkoutUrl = usableStripeCheckoutUrl(result.checkoutUrl);
+  if (checkoutUrl) {
+    return { action: "checkout", checkoutUrl };
+  }
+  if (isDepositHold(result)) {
+    return { action: "hold_missing_checkout" };
+  }
+  return { action: "confirm" };
 }
 
 export function readCatalogDepositAmount(item: {

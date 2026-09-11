@@ -8,6 +8,7 @@ import {
   isStripeCheckoutUrl,
   parseAppointmentCreateResult,
   parseCheckoutReturn,
+  resolveAppointmentCreateOutcome,
   previewDepositHint,
   readHttpUrl,
   resolveDepositReturnUrls,
@@ -103,6 +104,63 @@ describe("parseAppointmentCreateResult", () => {
   it("treats missing checkout as no deposit redirect", () => {
     const result = parseAppointmentCreateResult({ success: true, id: "appt" });
     assert.equal(result.checkoutUrl, null);
+  });
+
+  it("reads Phase B hold_active without booking_id", () => {
+    const result = parseAppointmentCreateResult({
+      success: true,
+      hold_id: "hold-1",
+      checkout_url: "https://checkout.stripe.com/c/pay/cs_test",
+      session_id: "cs_test",
+      payment_id: "pay-1",
+      deposit_amount: 25.0,
+      price: 100.0,
+      hold_expires_at: "2026-09-11T12:00:00Z",
+      expires_at: "2026-09-11T12:00:00Z",
+      client_id: "client-1",
+      status: "hold_active",
+    });
+    assert.equal(result.checkoutUrl, "https://checkout.stripe.com/c/pay/cs_test");
+    assert.equal(result.depositAmount, 25);
+    assert.equal(result.holdId, "hold-1");
+    assert.equal(result.status, "hold_active");
+    assert.equal(result.bookingId, null);
+  });
+});
+
+describe("resolveAppointmentCreateOutcome", () => {
+  it("follows checkout_url on hold_active even without booking_id", () => {
+    const outcome = resolveAppointmentCreateOutcome(
+      parseAppointmentCreateResult({
+        success: true,
+        hold_id: "hold-1",
+        checkout_url: "https://checkout.stripe.com/c/pay/cs_test",
+        status: "hold_active",
+        deposit_amount: 25,
+      })
+    );
+    assert.deepEqual(outcome, {
+      action: "checkout",
+      checkoutUrl: "https://checkout.stripe.com/c/pay/cs_test",
+    });
+  });
+
+  it("requires checkout_url on a hold (does not confirm as booked)", () => {
+    const outcome = resolveAppointmentCreateOutcome(
+      parseAppointmentCreateResult({
+        success: true,
+        hold_id: "hold-1",
+        status: "hold_active",
+      })
+    );
+    assert.deepEqual(outcome, { action: "hold_missing_checkout" });
+  });
+
+  it("keeps deposit-off scheduled book as confirm", () => {
+    const outcome = resolveAppointmentCreateOutcome(
+      parseAppointmentCreateResult({ success: true, id: "appt" })
+    );
+    assert.deepEqual(outcome, { action: "confirm" });
   });
 });
 
