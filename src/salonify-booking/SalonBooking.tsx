@@ -60,6 +60,7 @@ import {
   emptyReturnBookingData,
   emitWidgetEvent,
   loadDepositBookingSnapshot,
+  extractBookingErrorKey,
   followCheckoutUrl,
   parseAppointmentCreateResult,
   parseCheckoutReturn,
@@ -69,6 +70,7 @@ import {
   stripCheckoutReturnParams,
   sumSelectedDepositAmount,
   coalesceDepositAmount,
+  usableStripeCheckoutUrl,
 } from "./deposit";
 
 export function SalonBooking({
@@ -691,12 +693,19 @@ export function SalonBooking({
           return "Betaling kan niet worden gestart. Probeer het opnieuw vanuit de boekingspagina.";
         case "CHARGES_NOT_ENABLED":
           return "Online betalen is nog niet actief voor deze zaak. Neem contact op om te boeken.";
+        case "BOOT_ERROR":
+          return "Boeken is tijdelijk niet mogelijk. Probeer het later opnieuw.";
         default:
           break;
       }
 
       const lower = errorKeyOrMessage.toLowerCase();
-      if (lower.includes("method not allowed") || lower.includes("405")) {
+      if (
+        lower.includes("method not allowed") ||
+        lower.includes("405") ||
+        lower.includes("boot_error") ||
+        lower.includes("failed to start")
+      ) {
         return "Boeken is tijdelijk niet mogelijk. Probeer het later opnieuw.";
       }
       if (
@@ -840,13 +849,11 @@ export function SalonBooking({
 
       if (response.error || functionReturnedFailure) {
         const errorBody = await readErrorBody(response.error);
-
-        const errorKey =
-          typeof errorBody?.errorKey === "string"
-            ? errorBody.errorKey
-            : typeof errorBody?.error === "string"
-              ? errorBody.error
-              : undefined;
+        const errorKey = extractBookingErrorKey(
+          errorBody,
+          isRecord(response.data) ? response.data : undefined,
+          response.error
+        );
 
         console.error("Error booking appointment:", {
           errorKey,
@@ -914,15 +921,10 @@ export function SalonBooking({
           : undefined,
       };
 
-      if (createResult.checkoutUrl) {
+      const checkoutUrl = usableStripeCheckoutUrl(createResult.checkoutUrl);
+      if (checkoutUrl) {
         saveDepositBookingSnapshot(bookingSnapshot);
-        if (!followCheckoutUrl(createResult.checkoutUrl)) {
-          clearDepositBookingSnapshot();
-          toast.error(
-            "Betaling kon niet worden geopend. Probeer het opnieuw."
-          );
-          return;
-        }
+        followCheckoutUrl(checkoutUrl);
         toast.success("Je wordt doorgestuurd naar de betaling…");
         return;
       }

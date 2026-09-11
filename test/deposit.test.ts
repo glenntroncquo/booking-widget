@@ -3,14 +3,17 @@ import { describe, it } from "node:test";
 import {
   buildCheckoutReturnUrls,
   checkoutReturnBaseHref,
+  extractBookingErrorKey,
   followCheckoutUrl,
   isStripeCheckoutUrl,
   parseAppointmentCreateResult,
   parseCheckoutReturn,
   previewDepositHint,
+  readHttpUrl,
   resolveDepositReturnUrls,
   stripCheckoutReturnParams,
   sumSelectedDepositAmount,
+  usableStripeCheckoutUrl,
 } from "../src/salonify-booking/deposit.ts";
 
 describe("parseCheckoutReturn", () => {
@@ -150,11 +153,69 @@ describe("isStripeCheckoutUrl", () => {
   });
 });
 
+describe("readHttpUrl", () => {
+  it("repairs truncated https (ttps://) from the live host", () => {
+    assert.equal(
+      readHttpUrl("ttps://booking.salonify.co/glennie?deposit=success"),
+      "https://booking.salonify.co/glennie?deposit=success"
+    );
+  });
+
+  it("still rejects non-http schemes", () => {
+    assert.equal(readHttpUrl("javascript:alert(1)"), null);
+  });
+});
+
+describe("extractBookingErrorKey", () => {
+  it("reads DEPOSIT_URLS_REQUIRED from data when the body was not on error.context", () => {
+    assert.equal(
+      extractBookingErrorKey(undefined, {
+        success: false,
+        error: "DEPOSIT_URLS_REQUIRED",
+      }),
+      "DEPOSIT_URLS_REQUIRED"
+    );
+  });
+
+  it("reads BOOT_ERROR code from gateway JSON", () => {
+    assert.equal(
+      extractBookingErrorKey({
+        code: "BOOT_ERROR",
+        message: "Function failed to start (please check logs)",
+      }),
+      "BOOT_ERROR"
+    );
+  });
+
+  it("reads CHARGES_NOT_ENABLED from errorKey", () => {
+    assert.equal(
+      extractBookingErrorKey({ errorKey: "CHARGES_NOT_ENABLED" }),
+      "CHARGES_NOT_ENABLED"
+    );
+  });
+});
+
 describe("resolveDepositReturnUrls", () => {
   it("prefers host booking-path URLs", () => {
     const urls = resolveDepositReturnUrls({
       successUrl: "https://booking.salonify.co/glennie?deposit=success",
       cancelUrl: "https://booking.salonify.co/glennie?deposit=cancel",
+      fallbackHref: "https://widget.example/widget?companySlug=glennie",
+    });
+    assert.equal(
+      urls.success_url,
+      "https://booking.salonify.co/glennie?deposit=success"
+    );
+    assert.equal(
+      urls.cancel_url,
+      "https://booking.salonify.co/glennie?deposit=cancel"
+    );
+  });
+
+  it("repairs truncated host https so create still sends both booking-path URLs", () => {
+    const urls = resolveDepositReturnUrls({
+      successUrl: "ttps://booking.salonify.co/glennie?deposit=success",
+      cancelUrl: "ttps://booking.salonify.co/glennie?deposit=cancel",
       fallbackHref: "https://widget.example/widget?companySlug=glennie",
     });
     assert.equal(
@@ -187,6 +248,25 @@ describe("resolveDepositReturnUrls", () => {
   });
 });
 
+describe("usableStripeCheckoutUrl", () => {
+  it("returns null when checkout_url is missing", () => {
+    assert.equal(usableStripeCheckoutUrl(null), null);
+    assert.equal(usableStripeCheckoutUrl(""), null);
+  });
+
+  it("returns null for non-Stripe URLs so book can still confirm", () => {
+    assert.equal(
+      usableStripeCheckoutUrl("https://booking.salonify.co/glennie"),
+      null
+    );
+  });
+
+  it("keeps Stripe Checkout URLs", () => {
+    const url = "https://checkout.stripe.com/c/pay/cs_test";
+    assert.equal(usableStripeCheckoutUrl(url), url);
+  });
+});
+
 describe("followCheckoutUrl", () => {
   it("rejects non-stripe urls", () => {
     assert.equal(followCheckoutUrl("https://evil.example/pay"), false);
@@ -200,9 +280,15 @@ describe("previewDepositHint", () => {
     assert.equal(hint.showCta, true);
   });
 
-  it("prefers catalog amount over host amount", () => {
-    const hint = previewDepositHint(25, 10, false);
+  it("prefers catalog amount over host amount when host flag is unset", () => {
+    const hint = previewDepositHint(25, 10, undefined);
     assert.equal(hint.amount, 25);
     assert.equal(hint.showCta, true);
+  });
+
+  it("hides deposit CTA when host says deposit_enabled is false", () => {
+    const hint = previewDepositHint(25, 10, false);
+    assert.equal(hint.amount, null);
+    assert.equal(hint.showCta, false);
   });
 });
